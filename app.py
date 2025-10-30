@@ -5,7 +5,6 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="תיק מניות", layout="wide")
-st.title("📊 תיק המניות שלי")
 
 file_path = "תיק מניות.xlsx"
 
