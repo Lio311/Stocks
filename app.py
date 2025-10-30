@@ -51,10 +51,10 @@ def convert_ticker(t):
 
     # מיפוי מזהים מספריים לטיקרים של yfinance (לדוגמה, LSE)
     if t_str == "1183441":
-        # נשמר את המספר המקורי כדי שנוכל לזהות אותו לצורך המרה
+        # נשמר את המספר המקורי כדי שנוכל לזהות אותו לצורך המרה, אבל נטען את הטיקר המתאים
         return "1183441"
     elif t_str == "1159250":
-        # נשמר את המספר המקורי כדי שנוכל לזהות אותו לצורך המרה
+        # נשמר את המספר המקורי כדי שנוכל לזהות אותו לצורך המרה, אבל נטען את הטיקר המתאים
         return "1159250" 
     
     # טיפול בפורמטים קיימים
@@ -108,27 +108,27 @@ def format_large_number(num):
 def get_forex_rate(currency_pair="ILS=X"):
     """מושך את שער החליפין הנוכחי (דולר לשקל - USDILS)"""
     try:
-        # USDILS=X או ILS=X מחזיר את שער הדולר בשקלים (לדוגמה 3.7)
+        # ILS=X אמור להחזיר את שער הדולר בשקלים (לדוגמה 3.7)
         forex = yf.Ticker(currency_pair)
         rate = forex.history(period="1d")["Close"].iloc[-1]
         
         if rate < 1:
-            # אם קיבלנו שער הפוך (כגון 0.27 מ-ILSUSD=X), נהפוך אותו
+            # אם קיבלנו שער הפוך, נהפוך אותו
             rate = 1 / rate
             
         return rate
     except Exception:
-        # st.warning("Could not fetch USD/ILS exchange rate. Using default rate 3.7.")
         return 3.7 # שער ידני מקורב
 
 # --- Data Fetching Function ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
-    # אם הטיקרים הם המספרים, צריך להשתמש בטיקרים הממשיים עבור yfinance
+    # הטיקרים 1159250 ו-1183441 הם טיקרים אירופאיים המדווחים במטבע המקומי שלהם (EUR/GBP)
+    # yfinance הופכת אותם לטיקרים המתאימים:
     if ticker == "1183441":
-        yf_ticker = "SPXP.L"
+        yf_ticker = "SPXP.L" # Invesco S&P 500 UCITS ETF (LSE - GBP)
     elif ticker == "1159250":
-        yf_ticker = "IUSA.L"
+        yf_ticker = "IUSA.L" # iShares $ CORE S&P 500 UCITS (LSE - USD) - משוער
     else:
         yf_ticker = ticker
         
@@ -152,7 +152,7 @@ def get_stock_data(ticker, period="1y"):
         except:
             current_price = data["Close"].iloc[-1]
 
-        # נתוני המחיר ההיסטוריים והנוכחיים מוחזרים כאן גולמיים
+        # נתוני המחיר נשלפים במטבע שבו נסחר הטיקר (לרוב USD או GBP)
         return data, current_price, info, recommendations, quarterly_earnings
     except Exception as e:
         return None, None, None, None, None
@@ -162,17 +162,13 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
     
-    # 📌 הגדרת טיקרים ישראליים לצורך המרה
-    ILS_TICKERS = ["1159250", "1183441"]
+    # 📌 הגדרת טיקרים שבהם מחיר העלות הוא בשקלים ILS (מכיוון שהם נקנו בישראל)
+    ILS_COST_TICKERS = ["1159250", "1183441"]
     
-    # --- Currency Setup ---
-    # משיכת שער חליפין: דולר לשקל (USDILS)
-    USD_TO_ILS_RATE = get_forex_rate("ILS=X")
+    # --- Load Data (with default period) ---
+    data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, "1y") 
     
-    # --- Load Data ---
-    data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, "1y") # טוענים שנה כברירת מחדל
-    
-    # Period Selection
+    # Period Selection (loads fresh data)
     col1, col2 = st.columns([1, 4])
     with col1:
         period = st.selectbox(
@@ -191,7 +187,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
             }[x]
         )
     
-    # טעינת הנתונים מחדש עם התקופה שנבחרה (הקאש יטפל בכך ביעילות)
+    # טעינת הנתונים מחדש עם התקופה שנבחרה
     data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
 
 
@@ -205,30 +201,28 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
         current_price_raw = data_raw["Close"].iloc[-1]
 
     
-    # 📌 CONVERSION LOGIC (המרת נתונים מותנית) 📌
+    # 📌 CONVERSION LOGIC (המרת מחיר עלות בלבד) 📌
     
-    if ticker in ILS_TICKERS:
-        st.caption(f"**מצב: מניה מקומית (ILS) | שער חליפין (USD -> ILS):** $1 = ₪{USD_TO_ILS_RATE:.4f}")
+    USD_TO_ILS_RATE = None # אתחול
+    
+    if ticker in ILS_COST_TICKERS:
+        # מחיר עלות בשקלים -> המרה לדולר
+        USD_TO_ILS_RATE = get_forex_rate("ILS=X")
+        st.caption(f"**מצב: עלות ב-ILS | שער חליפין (USD -> ILS):** $1 = ₪{USD_TO_ILS_RATE:.4f}")
         
         # 1. המרת מחיר עלות (שקלים -> דולר)
         cost_price_usd = cost_price_ils / USD_TO_ILS_RATE
         
-        # 2. המרת מחיר נוכחי (אגורות -> שקלים -> דולר)
-        current_price_usd = (current_price_raw / 100) / USD_TO_ILS_RATE
-        
-        # 3. המרת נתונים היסטוריים (אגורות -> שקלים -> דולר)
+        # 2. המחירים מ-YFinance (current/historical) נשארים כמות שהם (USD/מטבע זר)
+        current_price_usd = current_price_raw 
         data = data_raw.copy()
-        conversion_factor = 1 / (100 * USD_TO_ILS_RATE)
         
-        for col in ['Open', 'High', 'Low', 'Close']:
-            data[col] = data[col] * conversion_factor
-            
         display_currency = "USD $"
 
     else:
-        # מצב: מניה זרה (NASDAQ/LSE) - מחיר העלות בטבלה נחשב USD (או הומרה כבר ידנית)
-        # ונתוני yfinance כבר במטבע זר (נניח USD או מקור).
-        cost_price_usd = cost_price_ils # משתמש במחיר העלות הגולמי כ-USD
+        # מצב: מניה זרה/רגילה - אין צורך בהמרה למחיר העלות
+        # מחיר עלות בטבלה נחשב USD (או מטבע זר, אך נשאר ללא שינוי).
+        cost_price_usd = cost_price_ils 
         current_price_usd = current_price_raw
         data = data_raw
         display_currency = "USD $" # מניחים שטיקרים זרים הם ב-USD
@@ -246,7 +240,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     # --- Price and Portfolio Metrics ---
     st.markdown(f"### Portfolio Performance ({display_currency})")
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Cost Price", f"${cost_price:.2f}")
+    col1.metric("Cost Price (USD)", f"${cost_price:.2f}")
     col2.metric("Current Price", f"${current_price:.2f}", delta=change_abs_rounded)
     
     if change_pct >= 0:
@@ -269,47 +263,47 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     
     st.markdown("---")
     
-    # --- Plotly Graph (Now in USD) ---
-    st.markdown(f"### Price Chart ({display_currency})")
+    # --- Plotly Graph (Historical data is in its native currency, Cost Price is in USD) ---
+    st.markdown(f"### Price Chart (Native Currency)")
     fig = go.Figure()
     color = '#34A853' if change_pct >= 0 else '#EA4335'
     
-    # Closing Price (Uses data converted/native USD)
+    # Closing Price (Uses data in native currency)
     fig.add_trace(go.Scatter(
-        x=data.index,
-        y=data["Close"],
+        x=data_raw.index, # משתמשים בנתונים הגולמיים
+        y=data_raw["Close"],
         mode='lines',
-        name=f'Closing Price ({display_currency})',
+        name='Closing Price (Native)',
         line=dict(color=color, width=2),
         fill='tozeroy',
         fillcolor=f'rgba({int(color[1:3],16)}, {int(color[3:5],16)}, {int(color[5:7],16)}, 0.15)',
-        hovertemplate='<b>Date:</b> %{x}<br><b>Price:</b> $%{y:.2f}<extra></extra>'
+        hovertemplate='<b>Date:</b> %{x}<br><b>Price:</b> %{y:.2f}<extra></extra>'
     ))
     
-    # Cost Price Line (in USD)
+    # Cost Price Line (Converted to USD for comparison - רק לקו הייחוס)
     fig.add_trace(go.Scatter(
-        x=[data.index[0], data.index[-1]],
-        y=[cost_price, cost_price], 
+        x=[data_raw.index[0], data_raw.index[-1]],
+        y=[cost_price_usd, cost_price_usd], 
         mode='lines',
         name='Cost Price (USD)',
         line=dict(color='red', width=2, dash='dash'),
         hovertemplate='<b>Cost Price:</b> $%{y:.2f}<extra></extra>'
     ))
     
-    # Current Price Marker (in USD)
+    # Current Price Marker (in Native Currency)
     fig.add_trace(go.Scatter(
-        x=[data.index[-1]],
-        y=[current_price],
+        x=[data_raw.index[-1]],
+        y=[current_price_raw],
         mode='markers',
-        name=f'Current Price ({display_currency})',
+        name='Current Price (Native)',
         marker=dict(size=12, color='orange', symbol='star'),
-        hovertemplate='<b>Current Price:</b> $%{y:.2f}<extra></extra>'
+        hovertemplate='<b>Current Price:</b> %{y:.2f}<extra></extra>'
     ))
     
     fig.update_layout(
-        title={'text': f"{ticker} - Performance Tracking (All values in USD)", 'x':0.5, 'xanchor':'center'},
+        title={'text': f"{ticker} - Performance Tracking (Cost Price converted to USD for reference)", 'x':0.5, 'xanchor':'center'},
         xaxis_title="Date",
-        yaxis_title=f"Price ({display_currency})",
+        yaxis_title="Price (Native Currency)",
         template="plotly_white",
         height=600,
         hovermode='x unified',
@@ -320,19 +314,18 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     
     st.markdown("---") 
     
-    # --- Price Statistics (in USD) ---
-    st.markdown(f"### Price Statistics ({display_currency})")
+    # --- Price Statistics (in Native Currency) ---
+    st.markdown("### Price Statistics (Native Currency)")
     col1, col2, col3, col4 = st.columns(4)
-    col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
-    col2.info(f"**Maximum Price:**\n${data['Close'].max():.2f}")
-    col3.info(f"**Average Price:**\n${data['Close'].mean():.2f}")
-    col4.info(f"**Volatility (SD):**\n${data['Close'].std():.2f}")
+    # שימוש ב-data_raw
+    col1.info(f"**Minimum Price:**\n{data_raw['Close'].min():.2f}")
+    col2.info(f"**Maximum Price:**\n{data_raw['Close'].max():.2f}")
+    col3.info(f"**Average Price:**\n{data_raw['Close'].mean():.2f}")
+    col4.info(f"**Volatility (SD):**\n{data_raw['Close'].std():.2f}")
     
     # Recent Data
-    with st.expander(f"Recent Data (Last 10 Trading Days) - Converted to {display_currency}"):
-        # נתוני הווליום לא עברו המרה כי הם מספרים של יחידות
-        recent_data = data[['Open','High','Low','Close']].tail(10).copy()
-        recent_data['Volume'] = data_raw['Volume'].tail(10) # שימוש בווליום המקורי
+    with st.expander("Recent Data (Last 10 Trading Days) - Native Currency"):
+        recent_data = data_raw[['Open','High','Low','Close','Volume']].tail(10).copy()
         recent_data = recent_data.round(2)
         st.dataframe(recent_data, use_container_width=True)
         
