@@ -25,12 +25,7 @@ if header_row_idx is None:
 
 df = pd.read_excel(file_path, header=header_row_idx)
 df.columns = [str(col).strip() for col in df.columns]
-df = df.dropna(subset=["טיקר", "מחיר עלות"])
-
-# ניקוי מחיר עלות
-df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
-df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
-df = df.dropna(subset=["מחיר עלות"])
+df = df.dropna(subset=["טיקר"])
 
 # המרת טיקרים לפורמט yfinance
 def convert_ticker(t):
@@ -48,33 +43,23 @@ df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
 if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = None
 
-# פונקציה להצגת גרף מהקנייה ועד היום
-def plot_stock_graph(ticker, cost_price):
+# פונקציה להצגת גרף בסיסי
+def plot_stock_graph(ticker):
     start_date = datetime.now() - timedelta(days=30)  # חודש אחורה
     data = yf.download(ticker, start=start_date, progress=False)
     if data.empty:
         st.warning(f"לא נמצאו נתונים עבור {ticker}")
         return
 
-    # מחיר נוכחי בזמן אמת
-    try:
-        current_price = yf.Ticker(ticker).fast_info["last_price"]
-    except:
-        current_price = data["Close"][-1]  # fallback
-
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=data.index, y=data["Close"], mode='lines', name='שער סגירה'))
-    fig.add_hline(y=cost_price, line=dict(color='red', dash='dash'), name='מחיר קנייה')
     fig.update_layout(
-        title=f"{ticker} - מחיר קנייה: {cost_price} | מחיר נוכחי: {current_price}",
+        title=f"{ticker} - חודש אחרון",
         xaxis_title="תאריך",
         yaxis_title="שער",
         template="plotly_white",
         height=600
     )
-
-    change_pct = ((current_price - cost_price) / cost_price) * 100
-    st.write(f"**שינוי מצטבר מהקנייה:** {change_pct:.2f}%")
     st.plotly_chart(fig, use_container_width=True)
 
 # יצירת כפתורים בראש העמוד
@@ -84,16 +69,11 @@ for i in range(0, len(df), cols_per_row):
     for j, col in enumerate(cols):
         row = df.iloc[i + j]
         ticker = row["yfinance_ticker"]
-        cost_price = row["מחיר עלות"]
         button_label = str(row["טיקר"]).strip()
 
-        if col.button(button_label):
+        if button_label != "" and col.button(button_label):
             st.session_state.selected_ticker = ticker
-            st.session_state.selected_cost_price = cost_price
 
 # הצגת הגרף של המניה שנבחרה
 if st.session_state.selected_ticker:
-    plot_stock_graph(
-        st.session_state.selected_ticker,
-        st.session_state.selected_cost_price
-    )
+    plot_stock_graph(st.session_state.selected_ticker)
