@@ -237,20 +237,21 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         dividend_yield = info.get('dividendYield', None)
         
         # מציגים את הנתונים העיקריים בשורה הראשונה
-        f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns(5)
+        f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         
         f_col1.metric("**Market Cap**", format_large_number(market_cap))
         f_col2.metric("**P/E Ratio (TTM)**", f"{pe_ratio:.2f}" if pe_ratio else "N/A")
         f_col3.metric("**Forward P/E**", f"{forward_pe:.2f}" if forward_pe else "N/A")
         f_col4.metric("**P/B Ratio**", f"{pb_ratio:.2f}" if pb_ratio else "N/A")
-        f_col5.metric("**Div. Yield**", f"{dividend_yield*100:.2f}%" if dividend_yield else "N/A")
+        
         
         # נתונים נוספים בשורה שנייה
-        f2_col1, f2_col2, f2_col3 = st.columns(3)
+        f2_col1, f2_col2, f2_col3, f2_col4 = st.columns(4)
         
         f2_col1.metric("**52 Week High**", f"${info.get('fiftyTwoWeekHigh', 'N/A'):.2f}")
         f2_col2.metric("**52 Week Low**", f"${info.get('fiftyTwoWeekLow', 'N/A'):.2f}")
         f2_col3.metric("**Avg. Volume**", format_large_number(info.get('averageVolume10days', None)))
+        f2_col4.metric("**Div. Yield**", f"{dividend_yield*100:.2f}%" if dividend_yield else "N/A")
 
         # הוספת תיאור החברה
         with st.expander("Company Description"):
