@@ -9,16 +9,24 @@ st.title("📊 תיק המניות שלי")
 
 file_path = "תיק מניות.xlsx"
 
-# קריאה של כל השורות ללא header כדי לא לפספס את הכותרת
+# קריאה של כל השורות ללא header
 df_raw = pd.read_excel(file_path, header=None)
 
-# חיפוש השורה שבה מתחילות הכותרות האמיתיות
-header_row_idx = df_raw[df_raw.iloc[:, 0] == "שינוי מצטבר(%)"].index[0]
+# חיפוש שורה שבה מופיעה המחרוזת "שינוי מצטבר" בכל אחד מהתאים
+header_row_idx = None
+for i, row in df_raw.iterrows():
+    if row.astype(str).str.strip().str.contains("שינוי מצטבר").any():
+        header_row_idx = i
+        break
+
+if header_row_idx is None:
+    st.error("לא נמצא שורת כותרת עם 'שינוי מצטבר'")
+    st.stop()
 
 # קריאה מחדש עם השורה הנכונה ככותרת
 df = pd.read_excel(file_path, header=header_row_idx)
 
-# הסרת שורות ריקות או שורות לא רלוונטיות
+# הסרת שורות ריקות או לא רלוונטיות
 df = df.dropna(subset=["טיקר"])
 
 # ניקוי רווחים בשמות העמודות
