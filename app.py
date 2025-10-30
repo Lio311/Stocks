@@ -10,7 +10,7 @@ st.set_page_config(
     page_icon="💼",
     layout="wide")
 
-st.title("💼 My Stock Portfolio")
+st.title("My Stock Portfolio")
 st.markdown("---")
 
 file_path = "תיק מניות.xlsx" # The file name remains the same as it's an external file reference
