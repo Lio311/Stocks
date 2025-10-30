@@ -268,17 +268,20 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     st.markdown("##### Total Position Value")
     col5, col6, col7, col8 = st.columns(4)
 
+    # ---!!! START DARK MODE CHANGES !!!---
+
     # Define consistent CSS styles for custom metrics
     label_font_size = "0.875rem" 
     value_font_size = "1.75rem" 
-    label_color = "rgba(49, 51, 63, 0.6)" 
-    value_color_default = "#31333F" 
+    # Use Streamlit's theme variable for text color (black/white)
+    label_style = f"font-size: {label_font_size}; color: var(--text-color); opacity: 0.6; line-height: 1.5;"
+    value_style_default = f"font-size: {value_font_size}; color: var(--text-color); line-height: 1.5; font-weight: 600;"
     
     # Metric 1: Total Cost (default color)
     col5.markdown(f"""
     <div style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
-        <span style="font-size: {label_font_size}; color: {label_color}; line-height: 1.5;">Total Cost (USD)</span>
-        <div style="font-size: {value_font_size}; color: {value_color_default}; line-height: 1.5; font-weight: 600;">
+        <span style="{label_style}">Total Cost (USD)</span>
+        <div style="{value_style_default}">
             ${total_cost_usd:,.2f}
         </div>
     </div>
@@ -287,40 +290,44 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     # Metric 2: Total Current Value (default color)
     col6.markdown(f"""
     <div style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
-        <span style="font-size: {label_font_size}; color: {label_color}; line-height: 1.5;">Total Current Value (USD)</span>
-        <div style="font-size: {value_font_size}; color: {value_color_default}; line-height: 1.5; font-weight: 600;">
+        <span style="{label_style}">Total Current Value (USD)</span>
+        <div style="{value_style_default}">
             ${total_current_value_usd:,.2f}
         </div>
     </div>
     """, unsafe_allow_html=True)
     
     # Metric 3: Total P/L (USD) (colored)
-    # Determine color (green/red) based on profit/loss
-    p_l_color = "#008000" if total_profit_loss_usd >= 0 else "#FF0000"
+    # Use Streamlit's theme variables for green/red
+    p_l_color = "var(--green-70)" if total_profit_loss_usd >= 0 else "var(--red-70)"
     p_l_sign = "+" if total_profit_loss_usd >= 0 else ""
+    value_style_pl_usd = f"font-size: {value_font_size}; color: {p_l_color}; line-height: 1.5; font-weight: 600;"
     
     col7.markdown(f"""
     <div style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
-        <span style="font-size: {label_font_size}; color: {label_color}; line-height: 1.5;">Total P/L (USD)</span>
-        <div style="font-size: {value_font_size}; color: {p_l_color}; line-height: 1.5; font-weight: 600;">
+        <span style="{label_style}">Total P/L (USD)</span>
+        <div style="{value_style_pl_usd}">
             {p_l_sign}${total_profit_loss_usd:,.2f}
         </div>
     </div>
     """, unsafe_allow_html=True)
     
     # Metric 4: Total P/L (%) (colored)
-    pct_color = "#008000" if total_profit_loss_pct >= 0 else "#FF0000"
+    pct_color = "var(--green-70)" if total_profit_loss_pct >= 0 else "var(--red-70)"
     pct_sign = "+" if total_profit_loss_pct >= 0 else ""
+    value_style_pl_pct = f"font-size: {value_font_size}; color: {pct_color}; line-height: 1.5; font-weight: 600;"
 
     col8.markdown(f"""
     <div style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
-        <span style="font-size: {label_font_size}; color: {label_color}; line-height: 1.5;">Total P/L (%)</span>
-        <div style="font-size: {value_font_size}; color: {pct_color}; line-height: 1.5; font-weight: 600;">
+        <span style="{label_style}">Total P/L (%)</span>
+        <div style="{value_style_pl_pct}">
             {pct_sign}{total_profit_loss_pct:,.2f}%
         </div>
     </div>
     """, unsafe_allow_html=True)
     
+    # ---!!! END DARK MODE CHANGES !!!---
+
     st.markdown("---")
     
     # --- Plotly Graph (USD) ---
@@ -333,13 +340,11 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         "1y": "1 Year", "2y": "2 Years", "5y": "5 Years", "all": "All"
     }
     
-    # Find the index of the currently selected period for the selectbox default
     try:
         current_period_index = period_options.index(st.session_state.current_period)
     except ValueError:
         current_period_index = 4 # Default to 1y
         
-    # Create the period selectbox
     col1_select, col2_select = st.columns([1, 4])
     with col1_select:
         selected_period = st.selectbox(
@@ -350,7 +355,6 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
             format_func=lambda x: period_labels[x]
         )
 
-    # If the period changes, update session state and rerun the script
     if st.session_state.current_period != selected_period:
         st.session_state.current_period = selected_period
         st.rerun() 
@@ -358,6 +362,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     
     # Create the Plotly figure
     fig = go.Figure()
+    # These colors are fine for both modes
     color = '#34A853' if total_profit_loss_pct >= 0 else '#EA4335'
     
     # Closing Price (Uses data in USD)
@@ -397,7 +402,8 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         title={'text': f"{ticker} - Performance Tracking", 'x':0.5, 'xanchor':'center'},
         xaxis_title="Date",
         yaxis_title="Price (USD $)",
-        template="plotly_white",
+        # ---!!! DARK MODE CHANGE !!!---
+        template="streamlit", # This template syncs with Streamlit's theme
         height=600,
         hovermode='x unified',
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
@@ -433,13 +439,11 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         pb_ratio = info.get('priceToBook', None)
         dividend_yield = info.get('dividendYield', None)
         
-        # Format metrics, handling N/A values
         pe_ratio_str = f"{pe_ratio:.2f}" if pe_ratio is not None and pd.notna(pe_ratio) else "N/A"
         forward_pe_str = f"{forward_pe:.2f}" if forward_pe is not None and pd.notna(forward_pe) else "N/A"
         pb_ratio_str = f"{pb_ratio:.2f}" if pb_ratio is not None and pd.notna(pb_ratio) else "N/A"
         div_yield_str = f"{dividend_yield * 100:.2f}%" if dividend_yield is not None and pd.notna(dividend_yield) else "N/A"
         
-        # Display fundamental metrics in columns
         f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         
         f_col1.metric("**Market Cap**", format_large_number(market_cap))
@@ -458,7 +462,6 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         f2_col3.metric("**Avg. Volume**", format_large_number(info.get('averageVolume10days', None)))
         f2_col4.metric("**Div. Yield**", div_yield_str)
 
-        # Show company summary in an expander
         with st.expander("Company Description"):
             st.markdown(info.get('longBusinessSummary', 'No description available.'))
             
@@ -471,7 +474,6 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     st.markdown("### Analyst Recommendations")
     if recommendations is not None and not recommendations.empty:
         
-        # Get the most recent set of recommendations
         latest_recommendations = recommendations.iloc[-1]
         
         col1, col2, col3, col4, col5 = st.columns(5)
@@ -493,7 +495,6 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     if quarterly_earnings is not None and not quarterly_earnings.empty:
         
         try:
-            # Get the most recent earnings report
             latest_report = quarterly_earnings.iloc[-1]
             latest_date = latest_report.name 
             revenue = latest_report.get('Revenue', None)
