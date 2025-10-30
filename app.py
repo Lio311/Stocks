@@ -19,12 +19,7 @@ file_path = "תיק מניות.xlsx"
 # --- Data Loading and Cleaning ---
 @st.cache_data
 def load_portfolio():
-    try:
-        df_raw = pd.read_excel(file_path, header=None)
-    except FileNotFoundError:
-        st.error(f"Error: The file '{file_path}' was not found. Please ensure the Excel file is in the correct directory.")
-        return None
-        
+    df_raw = pd.read_excel(file_path, header=None)
     header_row_idx = None
     for i, row in df_raw.iterrows():
         # מחפשים את 'שינוי מצטבר' כדי למצוא את שורת הכותרת
@@ -45,7 +40,7 @@ def load_portfolio():
     df = df.dropna(subset=["מחיר עלות"])
     return df
 
-# --- Ticker Conversion for yfinance (UPDATED MAPPING) ---
+# --- Ticker Conversion for yfinance ---
 def convert_ticker(t):
     t_str = str(t).strip()
 
@@ -53,7 +48,7 @@ def convert_ticker(t):
     if t_str == "1183441":
         return "1183441"
     elif t_str == "1159250":
-        return "1159250" # נשמר כמספר כדי לזהות אותו לצורך המרה
+        return "1159250" 
     
     # טיפול בפורמטים קיימים
     elif t_str.startswith("XNAS:"):
@@ -114,10 +109,9 @@ def get_forex_rate(currency_pair="ILS=X"):
             
         return rate
     except Exception:
-        # st.warning("Could not fetch USD/ILS exchange rate. Using default rate 3.7.")
         return 3.7 # שער ידני מקורב
 
-# --- Data Fetching Function (UPDATED MAPPING) ---
+# --- Data Fetching Function (yf_ticker logic) ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     # המרה לטיקר ש-yfinance מכירה
@@ -148,7 +142,6 @@ def get_stock_data(ticker, period="1y"):
         except:
             current_price = data["Close"].iloc[-1]
 
-        # נתוני המחיר נשלפים במטבע שבו נסחר הטיקר (Native Currency)
         return data, current_price, info, recommendations, quarterly_earnings
     except Exception as e:
         return None, None, None, None, None
@@ -202,17 +195,18 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     if ticker in ILS_COST_TICKERS:
         # מחיר עלות בשקלים -> המרה לדולר
         USD_TO_ILS_RATE = get_forex_rate("ILS=X")
-        st.caption(f"**מצב: עלות ב-ILS | שער חליפין (USD -> ILS):** $1 = ₪{USD_TO_ILS_RATE:.4f}")
+        # 🟢 השורה המתורגמת:
+        st.caption(f"**Status: Cost Price in ILS | Exchange Rate (USD → ILS):** $1 = ₪{USD_TO_ILS_RATE:.4f}")
         
         # 1. המרת מחיר עלות (שקלים -> דולר)
         cost_price_usd = cost_price_ils / USD_TO_ILS_RATE
         
-        # 2. המחירים מ-YFinance (current/historical) נשארים ללא שינוי (ב-USD, כפי שציינת)
+        # 2. המחירים מ-YFinance (current/historical) נשארים ללא שינוי (USD)
         current_price_usd = current_price_raw 
         
     else:
         # מצב: מניה זרה/רגילה - אין צורך בהמרה
-        cost_price_usd = cost_price_ils # מחיר עלות גולמי (נניח שהוא כבר ב-USD)
+        cost_price_usd = cost_price_ils # מחיר עלות גולמי
         current_price_usd = current_price_raw
     
     # 2. חישוב רווחים בדולר (USD) - כעת זה USD מול USD
