@@ -101,10 +101,10 @@ def get_stock_data(ticker, period="1y"):
         # משיכת נתונים פונדמנטליים
         info = stock.info
         
-        # 🌟 חדש: משיכת המלצות אנליסטים
+        # חדש: משיכת המלצות אנליסטים
         recommendations = stock.get_recommendations_summary() 
         
-        # 🌟 חדש: משיכת רווחים רבעוניים
+        # חדש: משיכת רווחים רבעוניים
         quarterly_earnings = stock.quarterly_earnings
         
         if data.empty:
@@ -246,7 +246,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.markdown("---") # מפריד אחרי הגרף
     
     # --- Key Fundamental Data ---
-    st.markdown("### 🔑 Key Fundamental Data")
+    st.markdown("### Key Fundamental Data")
     if info is not None:
         market_cap = info.get('marketCap', None)
         pe_ratio = info.get('trailingPE', None)
@@ -280,8 +280,8 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     st.markdown("---")
     
-    # --- 📊 Analyst Recommendations (NEW SECTION) ---
-    st.markdown("### 📊 Analyst Recommendations")
+    # --- Analyst Recommendations ---
+    st.markdown("### Analyst Recommendations")
     if recommendations is not None and not recommendations.empty:
         
         # get_recommendations_summary מחזירה טבלה מצטברת - נשתמש בשורה האחרונה לסיכום העדכני
@@ -298,19 +298,14 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         col4.metric("Sell", f"{latest_recommendations.get('sell', 0):.0f}", delta_color="inverse")
         col5.metric("Strong Sell", f"{latest_recommendations.get('strongSell', 0):.0f}", delta_color="inverse")
 
-        with st.expander("Recommendations Trend (Historical)"):
-            # 💡 התיקון כאן: שימוש ב-'Int64' (Integer Nullable) במקום int כדי למנוע שגיאות המרה
-            # הפעולה מבוצעת על העמודות המספריות בלבד (המלצות)
-            numeric_cols = ['strongBuy', 'buy', 'hold', 'sell', 'strongSell']
-            df_display = recommendations[numeric_cols].astype('Int64', errors='ignore').T
-            st.dataframe(df_display, use_container_width=True) 
+        # ❗ ההיסטוריה של ההמלצות הוסרה כפי שביקשת
     else:
         st.info("Analyst recommendations are not available for this stock.")
 
     st.markdown("---")
 
-    # --- 💰 Latest Quarterly Earnings Report (NEW SECTION) ---
-    st.markdown("### 💰 Latest Quarterly Earnings Report")
+    # --- Latest Quarterly Earnings Report ---
+    st.markdown("### Latest Quarterly Earnings Report")
     if quarterly_earnings is not None and not quarterly_earnings.empty:
         
         # בחר את הדוח הרבעוני האחרון (השורה האחרונה ב-DataFrame)
@@ -340,7 +335,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.markdown("---")
 
     # --- Price Statistics (Original Section) ---
-    st.markdown("### 📈 Price Statistics")
+    st.markdown("### Price Statistics")
     col1, col2, col3, col4 = st.columns(4)
     col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
     col2.info(f"**Maximum Price:**\n${data['Close'].max():.2f}")
@@ -381,8 +376,7 @@ st.markdown("---")
 # --- Display Selected Stock Analysis ---
 if st.session_state.selected_ticker is not None:
     
-    # הפקודה לגלילה אוטומטית לנקודה זו
-    st.markdown('<a id="analysis_anchor"></a>', unsafe_allow_html=True)
+    # ❗ הפקודה לגלילה אוטומטית הוסרה כפי שביקשת
     
     # מציג את הניתוח
     plot_advanced_stock_graph(
