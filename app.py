@@ -112,8 +112,28 @@ def get_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None, None
 
+# --- Scroll Function (NEW) ---
+def scroll_to_element(element_id):
+    """מזריק קוד JS כדי לגלוש לאלמנט ספציפי לפי ה-ID שלו."""
+    st.markdown(
+        f"""
+        <script>
+            var element = document.getElementById('{element_id}');
+            if (element) {{
+                // גלילה חלקה (smooth) למיקום של האלמנט
+                element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+            }}
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
+    
 # --- Advanced Plotting Function (MODIFIED) ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
+    
+    # *** תג HTML עם ID כדי לסמן את נקודת ההתחלה לגלילה ***
+    st.markdown('<a id="analysis_start"></a>', unsafe_allow_html=True)
+    
     st.subheader(f"Detailed Analysis: {stock_name}")
     
     # Period Selection
@@ -226,7 +246,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.markdown("---") # מפריד אחרי הגרף
     
-    # --- Key Fundamental Data (MOVED BELOW THE CHART) ---
+    # --- Key Fundamental Data ---
     st.markdown("### Key Fundamental Data")
     if info is not None:
         market_cap = info.get('marketCap', None)
@@ -261,7 +281,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     st.markdown("---")
     
-    # Statistics (MOVED BELOW THE CHART)
+    # Statistics
     st.markdown("### Price Statistics")
     col1, col2, col3, col4 = st.columns(4)
     col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
@@ -274,22 +294,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         recent_data = data[['Open','High','Low','Close','Volume']].tail(10).copy()
         recent_data = recent_data.round(2)
         st.dataframe(recent_data, use_container_width=True)
-        
-# --- JavaScript Scroll Function (NEW) ---
-def scroll_down_script():
-    """מזריק קוד JS כדי לגלוש אוטומטית למטה מעט."""
-    st.markdown(
-        """
-        <script>
-            // ממתין מעט לטעינת האלמנטים
-            setTimeout(function() {
-                // גלילה של 500 פיקסלים למטה. ניתן לשנות את הערך הזה.
-                window.scrollBy(0, 500);
-            }, 50);
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
+
 
 # --- Stock Selection Buttons ---
 st.subheader("Select a Stock for Analysis")
@@ -305,10 +310,16 @@ for i in range(0, len(df), cols_per_row):
             continue
         with cols[j]:
             if st.button(button_label, key=f"btn_{ticker}_{i}_{j}", use_container_width=True):
-                # לאחר לחיצה, מעדכנים את ה-session_state 
+                # לאחר לחיצה, מעדכנים את ה-session_state
                 st.session_state.selected_ticker = ticker
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
+                
+                # *** קריאה לגלילה מדויקת מיידית ***
+                scroll_to_element("analysis_start")
+                
+                # אין צורך ב-st.rerun() כאן כי Streamlit מפעיל rerun כאשר session_state משתנה
+                # או כאשר לוחצים על כפתור שמעדכן את המסך
 
 st.markdown("---")
 
@@ -320,10 +331,6 @@ if st.session_state.selected_ticker is not None:
         st.session_state.selected_cost_price,
         st.session_state.selected_name
     )
-    
-    # *** הוספנו כאן את קריאת הגלילה ***
-    # קריאה לפונקציה כדי לגרום לדף לגלוש למטה לאחר טעינת הדף עם התוכן החדש
-    scroll_down_script()
     
     if st.button("Back to Stock List", key="back_button"):
         st.session_state.selected_ticker = None
