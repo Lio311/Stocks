@@ -92,6 +92,11 @@ def plot_stock_graph(ticker, cost_price):
         
     # סינון הנתונים שיוצגו בגרף
     data_to_plot = data[data.index >= relevant_start_date].copy()
+    
+    # *** התיקון: בדיקה אם יש נתונים להצגה לאחר הסינון ***
+    if data_to_plot.empty:
+        st.error("לא נמצאו נתונים להצגה בטווח הרלוונטי. ייתכן שמחיר העלות נמוך מדי או שהנתונים חסרים.")
+        return
 
 
     # מחיר נוכחי בזמן אמת (ניסיון ראשון)
@@ -172,6 +177,7 @@ def plot_stock_graph(ticker, cost_price):
         )
     
     # הגדרת טווח Y דינמי עם מעט מרווח בטחון
+    # הנקודה הזו בטוחה כעת כי בדקנו ש-data_to_plot אינו ריק
     min_y = min(data_to_plot["Close"].min(), cost_price) * 0.98
     max_y = max(data_to_plot["Close"].max(), cost_price) * 1.02
 
