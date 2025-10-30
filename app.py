@@ -91,7 +91,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     with col1:
         period = st.selectbox(
             "Display Period:",
-            ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
+            ["7d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
             index=4,
             # **UPDATED: '1 Week' changed to '7 DAYS'**
             format_func=lambda x: {
