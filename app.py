@@ -22,10 +22,8 @@ def load_portfolio():
     df_raw = pd.read_excel(file_path, header=None)
     
     # Search for the header row containing "שינוי מצטבר" (Cumulative Change)
-    # Assuming the structure is fixed, but searching for the header is safer
     header_row_idx = None
     for i, row in df_raw.iterrows():
-        # Searching for 'Cumulative Change' in Hebrew to find the correct header row
         if row.astype(str).str.strip().str.contains("שינוי מצטבר", regex=False).any():
             header_row_idx = i
             break
@@ -79,9 +77,11 @@ if "selected_ticker" not in st.session_state:
 # --- Data Fetching Function ---
 @st.cache_data(ttl=300) # Cache data for 5 minutes
 def get_stock_data(ticker, period="1y"):
+    # If the requested period is 'all', yfinance uses 'max'
+    yf_period = 'max' if period == 'all' else period
     try:
         stock = yf.Ticker(ticker)
-        data = stock.history(period=period)
+        data = stock.history(period=yf_period)
         
         # Current Price
         try:
@@ -100,9 +100,10 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     # Period Selection
     col1, col2 = st.columns([1, 4])
     with col1:
+        # **UPDATED: Added 'all' option**
         period = st.selectbox(
             "Display Period:",
-            ["1mo", "3mo", "6mo", "1y", "2y", "5y"],
+            ["1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
             index=3,
             # English display mapping
             format_func=lambda x: {
@@ -111,7 +112,8 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
                 "6mo": "6 Months",
                 "1y": "1 Year",
                 "2y": "2 Years",
-                "5y": "5 Years"
+                "5y": "5 Years",
+                "all": "ALL History" # New option label
             }[x]
         )
         
@@ -148,8 +150,13 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             f"${change_abs:.2f}"
         )
     with col4:
-        total_days = (data.index[-1] - data.index[0]).days
-        st.metric("Period Length", f"{total_days} days")
+        # Display the actual range of data
+        time_delta = data.index[-1] - data.index[0]
+        if time_delta.days > 365:
+            display_period = f"{time_delta.days // 365} Years"
+        else:
+            display_period = f"{time_delta.days} Days"
+        st.metric("Period Length", display_period)
         
     st.markdown("---")
     
