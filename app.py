@@ -43,9 +43,22 @@ df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
 if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = None
 
-# פונקציה להצגת גרף בסיסי
-def plot_stock_graph(ticker):
-    start_date = datetime.now() - timedelta(days=30)  # חודש אחורה
+# מצב טווח זמן
+if "selected_range" not in st.session_state:
+    st.session_state.selected_range = "1M"  # חודש כברירת מחדל
+
+# פונקציה להצגת גרף סטנדרטי
+def plot_stock_graph(ticker, period):
+    # הורדת נתונים לפי טווח
+    if period == "1M":
+        start_date = datetime.now() - timedelta(days=30)
+    elif period == "1W":
+        start_date = datetime.now() - timedelta(days=7)
+    elif period == "1Y":
+        start_date = datetime.now() - timedelta(days=365)
+    else:
+        start_date = datetime.now() - timedelta(days=30)
+
     data = yf.download(ticker, start=start_date, progress=False)
     if data.empty:
         st.warning(f"לא נמצאו נתונים עבור {ticker}")
@@ -54,7 +67,7 @@ def plot_stock_graph(ticker):
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=data.index, y=data["Close"], mode='lines', name='שער סגירה'))
     fig.update_layout(
-        title=f"{ticker} - חודש אחרון",
+        title=f"{ticker} - טווח {period}",
         xaxis_title="תאריך",
         yaxis_title="שער",
         template="plotly_white",
@@ -62,7 +75,15 @@ def plot_stock_graph(ticker):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# יצירת כפתורים בראש העמוד
+# כפתורי טווח זמן מעל הגרף
+st.write("**בחר טווח זמן לגרף:**")
+time_cols = st.columns(4)
+ranges = ["1W", "1M", "1Y", "ALL"]
+for i, r in enumerate(ranges):
+    if time_cols[i].button(r):
+        st.session_state.selected_range = r
+
+# יצירת כפתורים למניות בראש העמוד
 cols_per_row = 6
 for i in range(0, len(df), cols_per_row):
     cols = st.columns(min(cols_per_row, len(df) - i))
@@ -70,10 +91,9 @@ for i in range(0, len(df), cols_per_row):
         row = df.iloc[i + j]
         ticker = row["yfinance_ticker"]
         button_label = str(row["טיקר"]).strip()
-
         if button_label != "" and col.button(button_label):
             st.session_state.selected_ticker = ticker
 
 # הצגת הגרף של המניה שנבחרה
 if st.session_state.selected_ticker:
-    plot_stock_graph(st.session_state.selected_ticker)
+    plot_stock_graph(st.session_state.selected_ticker, st.session_state.selected_range)
