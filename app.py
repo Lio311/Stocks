@@ -5,253 +5,121 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # הגדרת הגדרות עמוד
-st.set_page_config(page_title="תיק מניות", layout="wide")
-st.title("📊 תיק המניות שלי")
+st.set_page_config(page_title="גרף מניית גוגל", layout="wide")
+st.title("📈 תנודת שער מניית Alphabet Inc. (GOOG)")
 
-# שם קובץ האקסל
-file_path = "תיק מניות.xlsx"
+# --- הגדרות גרף ---
 
-# --- שלב 1: קריאה וניקוי נתונים ---
+# הגדרות מניה
+TICKER = "GOOG" # Alphabet Inc. Class C
+PERIOD = "5d"   # חמישה ימים אחרונים (כדי לדמות מבט קרוב)
+INTERVAL = "1h" # תדירות שעתית (כדי לדמות רציפות תוך-יומית)
 
-# קריאה של כל השורות ללא header כדי למצוא את שורת הכותרת האמיתית
-try:
-    df_raw = pd.read_excel(file_path, header=None)
-except FileNotFoundError:
-    st.error(f"שגיאה: הקובץ '{file_path}' לא נמצא. אנא ודא שהוא קיים באותה תיקיה.")
-    st.stop()
+# צבעי גרף
+LINE_COLOR = '#047857' # ירוק כהה
+FILL_COLOR = 'rgba(16, 185, 129, 0.4)' # ירוק שקוף
 
-# חיפוש שורה עם "שינוי מצטבר" כדי לזהות את הכותרות
-header_row_idx = None
-for i, row in df_raw.iterrows():
-    # בדיקה אם אחת מהתאים בשורה מכילה את הטקסט 'שינוי מצטבר' (בצורה גמישה)
-    if row.astype(str).str.strip().str.contains("שינוי מצטבר|מצטבר", case=False, na=False).any():
-        header_row_idx = i
-        break
-
-if header_row_idx is None:
-    st.error("לא נמצא שורת כותרת מתאימה (חפש 'שינוי מצטבר') בקובץ האקסל.")
-    st.stop()
-
-# קריאה מחדש של הקובץ עם שורת הכותרת הנכונה (האינדקס הוא 0-בסיס)
-df = pd.read_excel(file_path, header=header_row_idx)
-
-# ניקוי שמות העמודות
-df.columns = [str(col).strip() for col in df.columns]
-
-# סינון שורות ללא נתונים חיוניים
-df = df.dropna(subset=["טיקר", "מחיר עלות"])
-
-# ניקוי מחיר עלות והמרה למספר
-# מסיר תווים שאינם ספרות, נקודה או סימן מינוס
-df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
-df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
-df = df.dropna(subset=["מחיר עלות"])
-
-# המרת טיקרים לפורמט yfinance
-def convert_ticker(t):
-    """ממיר פורמטים של טיקרים (כגון XNAS:, XLON:) לפורמט הנתמך על ידי yfinance."""
-    t = str(t).strip()
-    if t.startswith("XNAS:"):
-        return t.split(":")[1]  # NASDAQ
-    elif t.startswith("XLON:"):
-        return t.split(":")[1] + ".L"  # LSE
-    else:
-        return t
-
-df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
-
-# --- שלב 2: הגדרת מצב ומחולל גרף ---
-
-# מצב המניה שנבחרה
-if "selected_ticker" not in st.session_state:
-    st.session_state.selected_ticker = None
-
-# פונקציה להצגת גרף משופר
-def plot_stock_graph(ticker, cost_price):
-    """מציג גרף מניה עם קו מחיר עלות וצביעה לפי רווח/הפסד, עם דגש על מראה נקי (כמו בתמונה)."""
+def plot_google_stock_graph():
+    """מוריד ומציג גרף שטח (Area Chart) נקי של מניית גוגל (GOOG)."""
     
-    # *** שינוי: הורדת נתונים שעתית (1h) עבור 30 הימים האחרונים בלבד ***
-    # נתונים שעה-שעה ייראו רציפים יותר מנתוני סגירה יומיים.
-    # yfinance לא תומך ב-period="5y" עם interval="1h", לכן נשתמש בטווח קצר ונתעלם מחישוב entry_date_found
-    # לצורך הצגה ויזואלית נקייה, אך נחשב רווח/הפסד על בסיס המחיר הנוכחי מול מחיר העלות.
-    data = yf.download(ticker, period="30d", interval="1h", progress=False) 
+    # הורדת נתונים מ-Yahoo Finance
+    st.subheader(f"נתונים ל-{PERIOD} אחרונים, בתדירות {INTERVAL}")
+    data = yf.download(TICKER, period=PERIOD, interval=INTERVAL, progress=False) 
     
     if data.empty:
-        st.warning(f"לא נמצאו נתונים היסטוריים עבור הטיקר: {ticker} ב-30 הימים האחרונים (בתדירות שעתית).")
-        # אם אין נתונים שעה-שעה, ננסה נתונים יומיים רגילים לשנה האחרונה
-        data = yf.download(ticker, period="1y", interval="1d", progress=False)
-        if data.empty:
-             st.warning(f"לא נמצאו נתונים יומיים עבור הטיקר: {ticker}.")
-             return
-
-    data_to_plot = data.copy()
-    
-    # *** בדיקה קפדנית יותר לאחר הסינון ***
-    if data_to_plot.empty:
-        st.error(f"לא נמצאו נתונים היסטוריים להצגה עבור הטיקר {ticker}.")
+        st.error(f"לא ניתן לטעון נתונים עבור הטיקר {TICKER} בטווח הנדרש.")
         return
 
-    # מחיר נוכחי בזמן אמת (ניסיון ראשון)
-    try:
-        current_price = yf.Ticker(ticker).fast_info["last_price"]
-    except Exception:
-        # אם אין מידע "מהיר", השתמש בשער הסגירה/סוף התקופה האחרון מתוך הנתונים שהורדו
-        current_price = data_to_plot["Close"].iloc[-1] 
+    data_to_plot = data["Close"].dropna()
     
-    
-    # חישוב שינוי מצטבר
-    change_pct = ((current_price - cost_price) / cost_price) * 100
-    
-    # קביעת צבע קו המניה בהתאם לרווח/הפסד
-    # צבע קו ומילוי: ירוק כהה / אדום כהה
-    line_color = '#047857' if current_price >= cost_price else '#B91C1C' 
-    fill_color = 'rgba(16, 185, 129, 0.4)' if current_price >= cost_price else 'rgba(239, 68, 68, 0.4)'
+    if data_to_plot.empty:
+        st.error(f"אין נתוני סגירה זמינים עבור הטיקר {TICKER} לאחר ניקוי.")
+        return
 
+    # מחיר נוכחי בזמן אמת
+    try:
+        current_price = yf.Ticker(TICKER).fast_info["last_price"]
+    except Exception:
+        current_price = data_to_plot.iloc[-1] 
+    
+    # שער הסגירה היומי הקודם (משמש כקו ייחוס סטנדרטי)
+    # ננסה למצוא את שער הסגירה האחרון לפני הנתונים המוצגים (אחרי סינון NaN)
+    try:
+        data_daily = yf.download(TICKER, period="6d", interval="1d", progress=False)
+        previous_close = data_daily["Close"].iloc[-2]
+    except Exception:
+        previous_close = None # אם לא נמצא, לא נציג את הקו
+
+    # --- יצירת הגרף (Area Chart) ---
+    
     fig = go.Figure()
     
-    # הוספת קו שער הסגירה (גרף שטח נקי)
+    # טרייס ראשי: גרף שטח עם קו
     fig.add_trace(go.Scatter(
         x=data_to_plot.index, 
-        y=data_to_plot["Close"], 
+        y=data_to_plot, 
         mode='lines', 
         name='שער סגירה',
-        line=dict(color=line_color, width=3),
+        line=dict(color=LINE_COLOR, width=3),
         fill='tozeroy', # מילוי עד ציר ה-Y=0
-        fillcolor=fill_color # צבע המילוי
+        fillcolor=FILL_COLOR 
     ))
 
-    # עדכון פריסת הגרף
-    st.markdown(f"### {ticker} - ניתוח ביצועים")
-    
-    # הצגת נתונים מרכזיים
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric(label="מחיר נוכחי", value=f"{current_price:.2f}")
-    with col2:
-        st.metric(
-            label="שינוי מצטבר (משער העלות)", 
-            value=f"{change_pct:.2f}%", 
-            delta=f"{current_price - cost_price:.2f}"
+    # הוספת קו שער הסגירה הקודם (כמו Prev. close בתמונה)
+    if previous_close is not None:
+        fig.add_hline(
+            y=previous_close, 
+            line=dict(color='gray', dash='dot', width=1), 
+            name='שער סגירה קודם'
         )
-    with col3:
-         st.metric(label="מחיר עלות", value=f"{cost_price:.2f}")
-    
-    # הגדרת טווח Y דינמי עם מעט מרווח בטחון
-    close_prices = data_to_plot["Close"].dropna()
-    
-    if close_prices.empty:
-        # אם אין נתונים מספריים, נשתמש בטווח קטן סביב המחיר הנוכחי
-        min_y = current_price * 0.98
-        max_y = current_price * 1.02
-    else:
-        # שימוש בטוח ב min/max עבור הנתונים המוצגים
-        min_y = close_prices.min() * 0.99
-        max_y = close_prices.max() * 1.01
+        fig.add_annotation(
+            x=data_to_plot.index[-1],
+            y=previous_close,
+            text=f"Prev. close: {previous_close:.2f}",
+            showarrow=False,
+            xshift=70,
+            yshift=0,
+            font=dict(size=12, color="gray"),
+        )
 
 
+    # --- הגדרת טווח Y דינמי ---
+    min_y = data_to_plot.min() * 0.99
+    max_y = data_to_plot.max() * 1.01
+
+    # --- עדכון פריסת הגרף ---
     fig.update_layout(
         title={
-            'text': f"תנודת המניה {ticker} (30 יום אחרונים, שעה-שעה)",
+            'text': f"תנועת שער {TICKER} - מחיר נוכחי: {current_price:.2f}",
             'y':0.95,
             'x':0.5,
             'xanchor': 'center',
             'yanchor': 'top'
         },
-        xaxis_title="תאריך",
-        yaxis_title="שער",
+        xaxis_title="זמן",
+        yaxis_title="שער ($)",
         template="plotly_white",
         height=600,
         margin=dict(l=20, r=20, t=50, b=20),
-        # הסרת קווי רשת אופקיים/אנכיים למראה נקי
-        xaxis=dict(showgrid=False, tickformat="%H:%M\n%b %d"), # *** שינוי: פורמט תצוגת שעה ותאריך ***
+        # מראה נקי (הסרת קווי רשת)
+        xaxis=dict(
+            showgrid=False, 
+            tickformat="%H:%M\n%b %d", 
+            rangeselector=dict(
+                buttons=list([
+                    dict(count=1, label="1D", step="day", stepmode="backward"),
+                    dict(count=5, label="5D", step="day", stepmode="backward"),
+                    dict(count=1, label="1M", step="month", stepmode="backward"),
+                    dict(step="all")
+                ])
+            )
+        ),
         yaxis=dict(showgrid=False),
-        # הגדרת טווח Y דינמי
-        yaxis_range=[min_y, max_y], 
+        yaxis_range=[min_y, max_y],
+        hovermode="x unified" # אופטימיזציה ל-Hovering
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-# פונקציה להצגת גרף רגיל של מניית גוגל (GOOG)
-def plot_standard_google_graph():
-    """מציג גרף סטנדרטי של GOOG לחודש האחרון (שעה-שעה)."""
-    st.markdown("---")
-    st.markdown("### 📈 גרף ייחוס סטנדרטי: Alphabet (GOOG) - 30 יום אחרונים (שעה-שעה)")
-    
-    # *** שינוי: הורדת נתונים שעתית (1h) עבור 30 הימים האחרונים ***
-    data = yf.download("GOOG", period="30d", interval="1h", progress=False) 
-    
-    if data.empty:
-        st.warning("לא ניתן לטעון נתונים עבור GOOG בתדירות שעתית.")
-        return
-
-    # צבע ירוק-כחול סטנדרטי לגרף הייחוס
-    line_color = '#4285F4' 
-    fill_color = 'rgba(66, 133, 244, 0.4)' # כחול גוגל שקוף
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=data.index, 
-        y=data["Close"], 
-        mode='lines', 
-        name='שער סגירה',
-        line=dict(color=line_color, width=3), 
-        fill='tozeroy', # מילוי עד ציר ה-Y=0
-        fillcolor=fill_color # צבע המילוי
-    ))
-
-    fig.update_layout(
-        title='GOOG - שער סגירה לחודש האחרון',
-        xaxis_title="תאריך",
-        yaxis_title="שער",
-        template="plotly_white",
-        height=400,
-        margin=dict(l=20, r=20, t=50, b=20),
-        # הסרת קווי רשת והתאמת ציר X לשעה
-        xaxis=dict(showgrid=False, tickformat="%H:%M\n%b %d"), # *** שינוי: פורמט תצוגת שעה ותאריך ***
-        yaxis=dict(showgrid=False),
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-
-# --- שלב 3: יצירת כפתורי הניווט והצגת הגרף ---
-
-st.markdown("---")
-st.subheader("בחר מניה להצגת גרף:")
-
-# יצירת כפתורים בראש העמוד
-cols_per_row = 6
-for i in range(0, len(df), cols_per_row):
-    cols = st.columns(min(cols_per_row, len(df) - i))
-    for j, col in enumerate(cols):
-        row = df.iloc[i + j]
-        ticker = row["yfinance_ticker"]
-        cost_price = row["מחיר עלות"]
-
-        # הכנה של label נקי
-        button_label = str(row["טיקר"]).strip()
-        
-        if button_label == "" or button_label.lower() == "nan":
-            continue  # דילוג על שורות ריקות
-
-        # עיצוב כפתורים פשוט
-        button_key = f"btn_{ticker}_{i+j}"
-        
-        # שימוש במתקן כדי לאפשר לחיצה על הכפתור ועדכון ה-state
-        with col:
-            if st.button(button_label, key=button_key):
-                st.session_state.selected_ticker = ticker
-                st.session_state.selected_cost_price = cost_price
-
-
-# הצגת הגרף של המניה שנבחרה
-if st.session_state.selected_ticker:
-    st.markdown("---")
-    plot_stock_graph(
-        st.session_state.selected_ticker,
-        st.session_state.selected_cost_price
-    )
-else:
-    st.info("אנא בחר מניה מהכפתורים שלמעלה כדי לראות את הגרף שלה.")
-
-# הצגת גרף גוגל סטנדרטי (GOOG) תמיד
-plot_standard_google_graph()
+# --- קריאה לפונקציה הראשית ---
+plot_google_stock_graph()
