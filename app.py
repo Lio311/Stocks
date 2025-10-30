@@ -299,8 +299,9 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         col5.metric("Strong Sell", f"{latest_recommendations.get('strongSell', 0):.0f}", delta_color="inverse")
 
         with st.expander("Recommendations Trend (Historical)"):
-            # מציג את הטבלה המקורית של מגמות ההמלצה לאורך זמן
-            st.dataframe(recommendations.T.style.format('{:.0f}'), use_container_width=True)
+            # 💡 התיקון כאן: מילוי ערכי NaN ב-0 והמרה ל-int לפני טרנספוזיציה והצגה.
+            df_display = recommendations.fillna(0).astype(int).T
+            st.dataframe(df_display, use_container_width=True) 
     else:
         st.info("Analyst recommendations are not available for this stock.")
 
@@ -326,7 +327,10 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
         with st.expander("Quarterly Earnings History"):
             # הצגת טבלת הנתונים המלאה של הדוחות הרבעוניים
-            st.dataframe(quarterly_earnings.T.style.format(formatter={'Revenue': format_large_number, 'Earnings': format_large_number}), use_container_width=True)
+            # עיצוב ה-DataFrame כך שישתמש בפונקציית format_large_number 
+            st.dataframe(quarterly_earnings.T.style.format(
+                formatter={'Revenue': format_large_number, 'Earnings': format_large_number}
+            ), use_container_width=True)
             
     else:
         st.info("Quarterly earnings data is not available for this stock.")
