@@ -44,11 +44,15 @@ def plot_google_stock_graph():
     
     # שער הסגירה היומי הקודם (משמש כקו ייחוס סטנדרטי)
     # ננסה למצוא את שער הסגירה האחרון לפני הנתונים המוצגים (אחרי סינון NaN)
+    previous_close = None
     try:
+        # הורדת נתונים יומיים ל-6 ימים
         data_daily = yf.download(TICKER, period="6d", interval="1d", progress=False)
-        previous_close = data_daily["Close"].iloc[-2]
+        # שער הסגירה היומי הקודם הוא האיבר הלפני אחרון
+        if len(data_daily) >= 2:
+             previous_close = data_daily["Close"].iloc[-2]
     except Exception:
-        previous_close = None # אם לא נמצא, לא נציג את הקו
+        pass # השאר None במקרה של כשל
 
     # --- יצירת הגרף (Area Chart) ---
     
@@ -66,12 +70,14 @@ def plot_google_stock_graph():
     ))
 
     # הוספת קו שער הסגירה הקודם (כמו Prev. close בתמונה)
-    if previous_close is not None:
+    # *** התיקון: בדיקה ש-previous_close אינו NaN לפני הוספתו ***
+    if previous_close is not None and not pd.isna(previous_close):
         fig.add_hline(
             y=previous_close, 
             line=dict(color='gray', dash='dot', width=1), 
             name='שער סגירה קודם'
         )
+        # הוספת הכיתוב רק אם הוספנו את הקו
         fig.add_annotation(
             x=data_to_plot.index[-1],
             y=previous_close,
