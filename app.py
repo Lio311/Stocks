@@ -26,15 +26,21 @@ if header_row_idx is None:
 # קריאה מחדש עם השורה הנכונה ככותרת
 df = pd.read_excel(file_path, header=header_row_idx)
 
-# הסרת שורות ריקות או לא רלוונטיות
-df = df.dropna(subset=["טיקר"])
-
 # ניקוי רווחים בשמות העמודות
 df.columns = [str(col).strip() for col in df.columns]
 
-# ניקוי עמודות מספריות (הסרת סימני ₪, $ ורווחים)
+# הסרת שורות ריקות או לא רלוונטיות
+df = df.dropna(subset=["טיקר"])
+
+# ניקוי מתקדם של עמודות מספריות
 for col in ["מחיר עלות", "מחיר זמן אמת"]:
-    df[col] = df[col].astype(str).str.replace(r'[^\d\.-]', '', regex=True).astype(float)
+    # הסרת כל תווים שאינם ספרות, נקודה או מינוס
+    df[col] = df[col].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
+    # המרה למספר, המרה ל-NaN אם לא ניתן
+    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+# הסרת שורות עם ערכים לא חוקיים
+df = df.dropna(subset=["מחיר עלות", "מחיר זמן אמת", "טיקר"])
 
 # בדיקה שהעמודות הנדרשות קיימות
 required_cols = {"טיקר", "מחיר עלות", "מחיר זמן אמת"}
@@ -51,8 +57,8 @@ start_date = datetime.now() - timedelta(days=365)
 # יצירת כפתורים לכל מניה
 for _, row in df.iterrows():
     ticker = str(row["טיקר"]).strip()
-    cost_price = row["מחיר עלות"]
-    current_price = row["מחיר זמן אמת"]
+    cost_price = float(row["מחיר עלות"])
+    current_price = float(row["מחיר זמן אמת"])
 
     if st.button(ticker):
         st.subheader(f"{ticker} - גרף מהשנה האחרונה")
