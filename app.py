@@ -14,7 +14,6 @@ st.title("My Stock Portfolio")
 st.markdown("---")
 
 # ודא שנתיב הקובץ הוא נכון
-# **שימו לב: ודאו שקובץ "תיק מניות.xlsx" נמצא באותה תיקייה כמו קובץ הפייתון.**
 file_path = "תיק מניות.xlsx"
 
 # --- Data Loading and Cleaning ---
@@ -41,7 +40,6 @@ def load_portfolio():
     # מסננים שורות ללא טיקר או מחיר עלות
     df = df.dropna(subset=["טיקר", "מחיר עלות"])
     # ניקוי והמרה של 'מחיר עלות' למספרי
-    # שיפור הניקוי: מסיר רק תווי מטבע לא רצויים, במקרה שיש (כמו $ או ¥)
     df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.\-]', '', regex=True)
     df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
     df = df.dropna(subset=["מחיר עלות"])
@@ -73,6 +71,7 @@ if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = None
     st.session_state.selected_cost_price = None
     st.session_state.selected_name = None
+    st.session_state.debug_earnings = None # 📌 חדש: משתנה לשמירת תוצאת הדיבאג
 
 # --- Helper Function for Formatting Large Numbers ---
 def format_large_number(num):
@@ -95,43 +94,35 @@ def format_large_number(num):
     else:
         return f'{num:.2f}'
 
-# --- Data Fetching Function (Updated) ---
+# --- Data Fetching Function (Updated with Debug) ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
-    # אם period=1w הורד חודש נתונים כדי לוודא שיש מספיק נקודות
     yf_period = '1mo' if period == '1w' else ('max' if period == 'all' else period)
     
     try:
         stock = yf.Ticker(ticker)
-        # משיכת נתונים היסטוריים
         data = stock.history(period=yf_period)
-        
-        # משיכת נתונים פונדמנטליים
         info = stock.info
-        
-        # משיכת המלצות אנליסטים
         recommendations = stock.get_recommendations_summary() 
-        
-        # משיכת רווחים רבעוניים
         quarterly_earnings = stock.quarterly_earnings
+        
+        # 📌 נקודת דיבאג 1: שמירת התוצאה הגולמית מ-yfinance
+        st.session_state.debug_earnings = quarterly_earnings
         
         if data.empty:
             return None, None, None, None, None
             
-        # חתוך ל-7 הימים האחרונים אם period=1w
         if period == "1w":
             data = data[data.index >= (data.index[-1] - pd.Timedelta(days=7))]
 
         try:
-            # נסה להשתמש ב-fast_info, אם נכשל, השתמש במחיר הסגירה האחרון
             current_price = stock.fast_info.get("last_price", data["Close"].iloc[-1])
         except:
             current_price = data["Close"].iloc[-1]
 
-        # החזרת חמישה ערכים
         return data, current_price, info, recommendations, quarterly_earnings
     except Exception as e:
-        # st.error(f"Error fetching data for {ticker}: {e}") # ניתן להשתמש לדיבוג
+        st.session_state.debug_earnings = f"ERROR: {e}" # שמור את השגיאה לדיבאג
         return None, None, None, None, None
         
 # --- Advanced Plotting Function (Modified & Fixed) ---
@@ -158,9 +149,24 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             }[x]
         )
 
-    # Load Data (Updated to retrieve 5 values)
-    # 📌 כאן המשתנה quarterly_earnings מוגדר ונטען
+    # Load Data (The debug information is loaded into st.session_state here)
     data, current_price, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
+    
+    # 📌 נקודת דיבאג 2: הצגת נתוני הרווחים הגולמיים
+    with st.expander("🐛 DEBUG: Quarterly Earnings Raw Data"):
+        if isinstance(st.session_state.debug_earnings, str):
+            st.error(f"Error during data fetching: {st.session_state.debug_earnings}")
+        elif st.session_state.debug_earnings is None:
+            st.warning("quarterly_earnings is None.")
+        elif st.session_state.debug_earnings.empty:
+            st.warning("quarterly_earnings is an empty DataFrame.")
+            st.dataframe(st.session_state.debug_earnings)
+        else:
+            st.success("quarterly_earnings is a valid DataFrame:")
+            st.dataframe(st.session_state.debug_earnings)
+            st.caption(f"Shape: {st.session_state.debug_earnings.shape}")
+    
+    st.markdown("---")
     
     if data is None or data.empty:
         st.error(f"No historical data found for {ticker}")
@@ -170,7 +176,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         st.warning("Could not retrieve current price, using last closing price.")
         current_price = data["Close"].iloc[-1]
         
-    # Calculate Changes
+    # Calculate Changes (Rest of the code remains the same)
     change_abs = current_price - cost_price
     change_pct = (change_abs / cost_price) * 100
     change_abs_rounded = round(change_abs, 3)
@@ -201,7 +207,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.markdown("---")
     
-    # --- Plotly Graph (Original Plotting Logic) ---
+    # --- Plotly Graph ---
     st.markdown("### Price Chart")
     fig = go.Figure()
     color = '#34A853' if change_pct >= 0 else '#EA4335'
@@ -268,7 +274,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     st.markdown("---") 
 
-    # --- Key Fundamental Data ---
+    # --- Key Fundamental Data (unchanged) ---
     st.markdown("### Key Fundamental Data")
     if info is not None:
         market_cap = info.get('marketCap', None)
@@ -313,7 +319,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     st.markdown("---")
     
-    # --- Analyst Recommendations ---
+    # --- Analyst Recommendations (unchanged) ---
     st.markdown("### Analyst Recommendations")
     if recommendations is not None and not recommendations.empty:
         
@@ -336,7 +342,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
 
     st.markdown("---")
 
-    # --- Latest Quarterly Earnings Report (FIXED) --- 📌
+    # --- Latest Quarterly Earnings Report (unchanged logic) ---
     st.markdown("### Latest Quarterly Earnings Report")
 
     # ודא שיש נתונים ושה-DataFrame אינו ריק
@@ -360,13 +366,11 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             
             with st.expander("Quarterly Earnings History"):
                 # הצגת טבלת הנתונים המלאה של הדוחות הרבעוניים
-                # עיצוב ה-DataFrame כך שישתמש בפונקציית format_large_number 
                 st.dataframe(quarterly_earnings.T.style.format(
                     formatter={'Revenue': format_large_number, 'Earnings': format_large_number}
                 ), use_container_width=True)
                 
         except IndexError:
-             # טיפול למקרה נדיר של DF לא ריק אך בעיה בגישה לאינדקס (יותר ליתר ביטחון)
              st.info("Quarterly earnings data could not be parsed.")
         
     else:
@@ -374,7 +378,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     st.markdown("---")
     
-# --- Stock Selection Buttons ---
+# --- Stock Selection Buttons (unchanged) ---
 st.subheader("Select a Stock for Analysis")
 cols_per_row = 6
 for i in range(0, len(df), cols_per_row):
@@ -398,7 +402,7 @@ for i in range(0, len(df), cols_per_row):
 
 st.markdown("---")
 
-# --- Display Selected Stock Analysis ---
+# --- Display Selected Stock Analysis (unchanged) ---
 if st.session_state.selected_ticker is not None:
     
     # מציג את הניתוח
@@ -416,6 +420,6 @@ if st.session_state.selected_ticker is not None:
 else:
     st.info("Select a stock from the list above to see a detailed analysis.")
 
-# --- Footer ---
+# --- Footer (unchanged) ---
 st.markdown("---")
 st.caption(f"Data updated from Yahoo Finance | Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
