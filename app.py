@@ -168,7 +168,7 @@ def get_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None, None, None, None
         
-# --- Advanced Plotting Function (FIXED: Added Total Metrics Row) ---
+# --- Advanced Plotting Function (FIXED: Metric layout and Dropdown position) ---
 def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
@@ -179,27 +179,10 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     # --- Load Data (with default period) ---
     data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, "1y") 
     
-    # Period Selection (loads fresh data)
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        period = st.selectbox(
-            "Display Period:",
-            ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
-            index=4,
-            format_func=lambda x: {
-                "1w": "1 Week",
-                "1mo": "1 Month",
-                "3mo": "3 Months",
-                "6mo": "6 Months",
-                "1y": "1 Year",
-                "2y": "2 Years",
-                "5y": "5 Years",
-                "all": "All"
-            }[x]
-        )
+    # 📌 ה-Selectbox יועבר למטה, אחרי הגרף
     
     # טעינת הנתונים מחדש עם התקופה שנבחרה
-    data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
+    # data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
 
 
     # --- Check for data validity ---
@@ -240,7 +223,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     total_profit_loss_pct = (total_profit_loss_usd / total_cost_usd) * 100 if total_cost_usd != 0 else 0
 
     
-    # --- 📌 הצגת המדדים (שתי שורות, פונט גדול לרווח/הפסד) 📌 ---
+    # --- 📌 הצגת המדדים (שתי שורות, פונט גדול וצבעוני מותאם) 📌 ---
     
     st.markdown("### Portfolio Performance (USD $)")
     
@@ -267,37 +250,57 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         display_period = f"{time_delta.days}D"
     col4.metric("Data Period", display_period)
 
-    # --- שורה 2: מדדים לכלל ההחזקה (עם פונט גדול וצבעוני) ---
+    # --- שורה 2: מדדים לכלל ההחזקה (עם פונט גדול וצבעוני מותאם) ---
     st.markdown("##### Total Position Value")
     col5, col6, col7, col8 = st.columns(4)
 
-    # עלות כוללת
-    col5.metric("Total Cost (USD)", f"${total_cost_usd:,.2f}") 
+    # הגדרות עיצוב אחידות
+    label_font_size = "0.875rem" # גודל כותרת (כמו ב-st.metric)
+    value_font_size = "1.75rem" # גודל ערך (כמו ב-st.metric)
+    label_color = "rgba(49, 51, 63, 0.6)" # צבע כותרת אפור
+    value_color_default = "#31333F" # צבע ערך שחור
     
-    # שווי נוכחי
-    col6.metric("Total Current Value (USD)", f"${total_current_value_usd:,.2f}")
+    # --- מדד 1: עלות כוללת (שחור) ---
+    col5.markdown(f"""
+    <div style="padding: 0.5rem 0.25rem;">
+        <span style="font-size: {label_font_size}; color: {label_color}; line-height: 1.5;">Total Cost (USD)</span>
+        <div style="font-size: {value_font_size}; color: {value_color_default}; line-height: 1.5; font-weight: 600;">
+            ${total_cost_usd:,.2f}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # --- מטריקה מותאמת אישית לרווח/הפסד בדולרים (פונט גדול וצבעוני) ---
-    p_l_color = "green" if total_profit_loss_usd >= 0 else "red"
+    # --- מדד 2: שווי נוכחי (שחור) ---
+    col6.markdown(f"""
+    <div style="padding: 0.5rem 0.25rem;">
+        <span style="font-size: {label_font_size}; color: {label_color}; line-height: 1.5;">Total Current Value (USD)</span>
+        <div style="font-size: {value_font_size}; color: {value_color_default}; line-height: 1.5; font-weight: 600;">
+            ${total_current_value_usd:,.2f}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # --- מדד 3: רווח/הפסד בדולרים (צבעוני) ---
+    p_l_color = "#008000" if total_profit_loss_usd >= 0 else "#FF0000" # ירוק/אדום
     p_l_sign = "+" if total_profit_loss_usd >= 0 else ""
     
     col7.markdown(f"""
     <div style="padding: 0.5rem 0.25rem;">
-        <span style="font-size: 0.875rem; color: rgba(49, 51, 63, 0.6); line-height: 1.5;">Total P/L (USD)</span>
-        <div style="font-size: 1.75rem; color: {p_l_color}; line-height: 1.5; font-weight: 600;">
+        <span style="font-size: {label_font_size}; color: {label_color}; line-height: 1.5;">Total P/L (USD)</span>
+        <div style="font-size: {value_font_size}; color: {p_l_color}; line-height: 1.5; font-weight: 600;">
             {p_l_sign}${total_profit_loss_usd:,.2f}
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # --- מטריקה מותאמת אישית לרווח/הפסד באחוזים (פונט גדול וצבעוני) ---
-    pct_color = "green" if total_profit_loss_pct >= 0 else "red"
+    # --- מדד 4: רווח/הפסד באחוזים (צבעוני) ---
+    pct_color = "#008000" if total_profit_loss_pct >= 0 else "#FF0000"
     pct_sign = "+" if total_profit_loss_pct >= 0 else ""
 
     col8.markdown(f"""
     <div style="padding: 0.5rem 0.25rem;">
-        <span style="font-size: 0.875rem; color: rgba(49, 51, 63, 0.6); line-height: 1.5;">Total P/L (%)</span>
-        <div style="font-size: 1.75rem; color: {pct_color}; line-height: 1.5; font-weight: 600;">
+        <span style="font-size: {label_font_size}; color: {label_color}; line-height: 1.5;">Total P/L (%)</span>
+        <div style="font-size: {value_font_size}; color: {pct_color}; line-height: 1.5; font-weight: 600;">
             {pct_sign}{total_profit_loss_pct:,.2f}%
         </div>
     </div>
@@ -353,6 +356,35 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     )
     
     st.plotly_chart(fig, use_container_width=True)
+    
+    # --- 📌 תיבת הבחירה הועברה לכאן ---
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        period = st.selectbox(
+            "Display Period:",
+            ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
+            index=4,
+            key="period_selectbox", # הוספת מפתח למניעת שגיאות
+            format_func=lambda x: {
+                "1w": "1 Week",
+                "1mo": "1 Month",
+                "3mo": "3 Months",
+                "6mo": "6 Months",
+                "1y": "1 Year",
+                "2y": "2 Years",
+                "5y": "5 Years",
+                "all": "All"
+            }[x]
+        )
+    
+    # 📌 בדיקה אם התקופה השתנתה, ואם כן - טעינה מחדש של הכל
+    if 'current_period' not in st.session_state:
+        st.session_state.current_period = period
+
+    if st.session_state.current_period != period:
+        st.session_state.current_period = period
+        st.rerun() # טעינה מחדש של הדף עם התקופה החדשה
+
     
     st.markdown("---") 
     
@@ -482,6 +514,7 @@ for i in range(0, len(df), cols_per_row):
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
                 st.session_state.selected_quantity = stock_quantity
+                st.session_state.current_period = '1y' # איפוס התקופה לברירת מחדל
                 st.rerun() 
 
 st.markdown("---")
@@ -501,6 +534,7 @@ if st.session_state.selected_ticker is not None:
         st.session_state.selected_cost_price = None
         st.session_state.selected_name = None
         st.session_state.selected_quantity = None
+        st.session_state.current_period = None # איפוס התקופה
         st.rerun()
 else:
     st.info("Select a stock from the list above to see a detailed analysis.")
