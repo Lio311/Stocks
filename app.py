@@ -181,7 +181,6 @@ def plot_stock_graph(ticker, cost_price):
     # הגדרת טווח Y דינמי עם מעט מרווח בטחון
     
     # *** התיקון לטיפול ב-NaN ובסדרות חסרות נתונים בטווח Y ***
-    # .dropna() מבטיח שלא נכשל על NaN, ו-data_to_plot.empty כבר מטפל בסדרה ריקה לחלוטין.
     close_prices = data_to_plot["Close"].dropna()
     
     if close_prices.empty:
@@ -189,6 +188,7 @@ def plot_stock_graph(ticker, cost_price):
         min_y = cost_price * 0.98
         max_y = cost_price * 1.02
     else:
+        # שימוש בטוח ב min/max
         min_y = min(close_prices.min(), cost_price) * 0.98
         max_y = max(close_prices.max(), cost_price) * 1.02
 
@@ -211,6 +211,39 @@ def plot_stock_graph(ticker, cost_price):
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+# פונקציה להצגת גרף רגיל של מניית גוגל (GOOG)
+def plot_standard_google_graph():
+    """מציג גרף סטנדרטי של GOOG לשנה האחרונה."""
+    st.markdown("---")
+    st.markdown("### 📈 גרף ייחוס סטנדרטי: Alphabet (GOOG)")
+    
+    start_date = datetime.now() - timedelta(days=365)
+    data = yf.download("GOOG", start=start_date, progress=False)
+    
+    if data.empty:
+        st.warning("לא ניתן לטעון נתונים עבור GOOG.")
+        return
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=data.index, 
+        y=data["Close"], 
+        mode='lines', 
+        name='שער סגירה',
+        line=dict(color='#4285F4', width=3) # כחול גוגל
+    ))
+
+    fig.update_layout(
+        title='GOOG - שער סגירה לשנה האחרונה',
+        xaxis_title="תאריך",
+        yaxis_title="שער",
+        template="plotly_white",
+        height=400,
+        margin=dict(l=20, r=20, t=50, b=20),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
 
 # --- שלב 3: יצירת כפתורי הניווט והצגת הגרף ---
 
@@ -251,3 +284,6 @@ if st.session_state.selected_ticker:
     )
 else:
     st.info("אנא בחר מניה מהכפתורים שלמעלה כדי לראות את הגרף שלה.")
+
+# הצגת גרף גוגל סטנדרטי (GOOG) תמיד
+plot_standard_google_graph()
