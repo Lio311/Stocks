@@ -12,24 +12,25 @@ st.title("📈 תנודת שער מניית Alphabet Inc. (GOOG)")
 
 # הגדרות מניה
 TICKER = "GOOG" # Alphabet Inc. Class C
-PERIOD = "5d"   # חמישה ימים אחרונים (כדי לדמות מבט קרוב)
-INTERVAL = "1h" # תדירות שעתית (כדי לדמות רציפות תוך-יומית)
+PERIOD = "1y"   # שנה אחת אחרונה
+INTERVAL = "1d" # תדירות יומית
 
 # צבעי גרף
 LINE_COLOR = '#047857' # ירוק כהה
 FILL_COLOR = 'rgba(16, 185, 129, 0.4)' # ירוק שקוף
 
 def plot_google_stock_graph():
-    """מוריד ומציג גרף שטח (Area Chart) נקי של מניית גוגל (GOOG)."""
+    """מוריד ומציג גרף שטח (Area Chart) נקי של מניית גוגל (GOOG) לשנה האחרונה."""
     
     # הורדת נתונים מ-Yahoo Finance
-    st.subheader(f"נתונים ל-{PERIOD} אחרונים, בתדירות {INTERVAL}")
+    st.subheader(f"נתונים ל-{PERIOD} אחרונה, בתדירות {INTERVAL}")
     data = yf.download(TICKER, period=PERIOD, interval=INTERVAL, progress=False) 
     
     if data.empty:
         st.error(f"לא ניתן לטעון נתונים עבור הטיקר {TICKER} בטווח הנדרש.")
         return
 
+    # ניקוי ערכים חסרים
     data_to_plot = data["Close"].dropna()
     
     if data_to_plot.empty:
@@ -42,17 +43,6 @@ def plot_google_stock_graph():
     except Exception:
         current_price = data_to_plot.iloc[-1] 
     
-    # שער הסגירה היומי הקודם (משמש כקו ייחוס סטנדרטי)
-    previous_close = None
-    try:
-        # הורדת נתונים יומיים ל-6 ימים
-        data_daily = yf.download(TICKER, period="6d", interval="1d", progress=False)
-        # שער הסגירה היומי הקודם הוא האיבר הלפני אחרון
-        if len(data_daily) >= 2:
-             previous_close = data_daily["Close"].iloc[-2]
-    except Exception:
-        pass # השאר None במקרה של כשל
-
     # --- יצירת הגרף (Area Chart) ---
     
     fig = go.Figure()
@@ -63,34 +53,14 @@ def plot_google_stock_graph():
         y=data_to_plot, 
         mode='lines', 
         name='שער סגירה',
-        line=dict(color=LINE_COLOR, width=3),
+        line=dict(color=LINE_COLOR, width=1.5),
         fill='tozeroy', # מילוי עד ציר ה-Y=0
         fillcolor=FILL_COLOR 
     ))
 
-    # הוספת קו שער הסגירה הקודם (כמו Prev. close בתמונה)
-    # *** התיקון: בדיקה ישירה של סוג במקום pd.isna כדי למנוע כשלים ב-Pandas ***
-    if isinstance(previous_close, (float, int)) and not pd.isna(previous_close):
-        fig.add_hline(
-            y=previous_close, 
-            line=dict(color='gray', dash='dot', width=1), 
-            name='שער סגירה קודם'
-        )
-        # הוספת הכיתוב רק אם הוספנו את הקו
-        fig.add_annotation(
-            x=data_to_plot.index[-1],
-            y=previous_close,
-            text=f"Prev. close: {previous_close:.2f}",
-            showarrow=False,
-            xshift=70,
-            yshift=0,
-            font=dict(size=12, color="gray"),
-        )
-
-
     # --- הגדרת טווח Y דינמי ---
-    min_y = data_to_plot.min() * 0.99
-    max_y = data_to_plot.max() * 1.01
+    min_y = data_to_plot.min() * 0.98
+    max_y = data_to_plot.max() * 1.02
 
     # --- עדכון פריסת הגרף ---
     fig.update_layout(
@@ -101,7 +71,7 @@ def plot_google_stock_graph():
             'xanchor': 'center',
             'yanchor': 'top'
         },
-        xaxis_title="זמן",
+        xaxis_title="תאריך",
         yaxis_title="שער ($)",
         template="plotly_white",
         height=600,
@@ -109,12 +79,13 @@ def plot_google_stock_graph():
         # מראה נקי (הסרת קווי רשת)
         xaxis=dict(
             showgrid=False, 
-            tickformat="%H:%M\n%b %d", 
+            # פורמט תאריך חודשי/שנתי לגרף ארוך טווח
+            tickformat="%b %Y", 
             rangeselector=dict(
                 buttons=list([
-                    dict(count=1, label="1D", step="day", stepmode="backward"),
-                    dict(count=5, label="5D", step="day", stepmode="backward"),
                     dict(count=1, label="1M", step="month", stepmode="backward"),
+                    dict(count=6, label="6M", step="month", stepmode="backward"),
+                    dict(count=1, label="1Y", step="year", stepmode="backward"),
                     dict(step="all")
                 ])
             )
