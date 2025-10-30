@@ -124,22 +124,19 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     with col1:
         st.metric("Cost Price", f"${cost_price:.2f}")
     with col2:
-        # **תיקון: בדיקת ערך שלילי ושימוש בערך מוחלט עבור delta**
+        # **FIXED st.metric:** Pass the unformatted price as the second argument, and change_abs as delta.
         st.metric(
             "Current Price", 
             f"${current_price:.2f}",
-            value=None, # Streamlit infers delta direction automatically based on 'delta' sign
-            delta=change_abs, # Pass the raw absolute change
-            delta_color="normal" # 'normal' means green for positive, red for negative
+            delta=change_abs 
+            # delta_color="normal" is the default behavior (green up, red down)
         )
     with col3:
-        # **תיקון: בדיקת ערך שלילי ושימוש בערך מוחלט עבור delta**
+        # **FIXED st.metric:** Pass the unformatted percentage as the second argument, and change_abs as delta.
         st.metric(
             "Cumulative Change",
             f"{change_pct:.2f}%",
-            value=None,
-            delta=change_abs, # Pass the raw absolute change (to match the image)
-            delta_color="normal" 
+            delta=change_abs # Using change_abs for delta value (dollar amount) as shown in the image
         )
     with col4:
         # Display the actual range of data
