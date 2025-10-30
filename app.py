@@ -320,19 +320,31 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.markdown("---")
 
     # --- Latest Quarterly Earnings Report ---
-    st.markdown("### Latest Quarterly Earnings Report")
-    if quarterly_earnings is not None and not quarterly_earnings.empty:
-        
-        # בחר את הדוח הרבעוני האחרון (השורה האחרונה ב-DataFrame)
+st.markdown("### Latest Quarterly Earnings Report")
+
+# ודא שיש נתונים ושה-DataFrame אינו ריק
+if quarterly_earnings is not None and not quarterly_earnings.empty:
+    
+    # בחר את הדוח הרבעוני האחרון (השורה האחרונה ב-DataFrame)
+    try:
         latest_report = quarterly_earnings.iloc[-1]
-        
+    except IndexError:
+        # זה לא אמור לקרות אם עבר את הבדיקה של not quarterly_earnings.empty
+        st.info("Quarterly earnings data is not available (Index Error).")
+        st.markdown("---")
+        # Ensure we exit this block gracefully
+        quarterly_earnings = None 
+    
+    if quarterly_earnings is not None:
         # חלץ את הנתונים העיקריים
+        # Name הוא האינדקס, שהוא התאריך
         latest_date = latest_report.name 
         revenue = latest_report.get('Revenue', None)
         earnings = latest_report.get('Earnings', None)
         
         e_col1, e_col2, e_col3 = st.columns(3)
         
+        # הצגת המטריקות
         e_col1.metric("**Report Date**", latest_date.strftime('%Y-%m-%d'))
         e_col2.metric("**Revenue**", format_large_number(revenue))
         e_col3.metric("**Earnings**", format_large_number(earnings))
@@ -344,10 +356,10 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
                 formatter={'Revenue': format_large_number, 'Earnings': format_large_number}
             ), use_container_width=True)
             
-    else:
-        st.info("Quarterly earnings data is not available for this stock.")
-        
-    st.markdown("---")
+else:
+    st.info("Quarterly earnings data is not available for this stock.")
+    
+st.markdown("---")
     
 # --- Stock Selection Buttons ---
 st.subheader("Select a Stock for Analysis")
