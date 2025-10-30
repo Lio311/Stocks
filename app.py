@@ -303,7 +303,10 @@ st.markdown("---")
 # --- Display Selected Stock Analysis ---
 if st.session_state.selected_ticker is not None:
     
-    # הגלילה האוטומטית בוטלה כאן
+    # 🌟 הפקודה החדשה לגלילה אוטומטית לנקודה זו:
+    st.markdown('<a id="analysis_anchor"></a>', unsafe_allow_html=True)
+    
+    # st.subheader(f"Detailed Analysis: {stock_name}")  <-- הכותרת מוצגת בפונקציה
     
     # מציג את הניתוח
     plot_advanced_stock_graph(
