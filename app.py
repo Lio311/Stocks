@@ -5,16 +5,17 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="תיק מניות", layout="wide")
+st.title("📊 תיק המניות שלי")
 
 file_path = "תיק מניות.xlsx"
 
-# קריאה של כל השורות ללא header
+# קריאה של הקובץ עם header
 df_raw = pd.read_excel(file_path, header=None)
 
-# חיפוש שורה עם "שינוי מצטבר"
+# חיפוש שורת כותרת
 header_row_idx = None
 for i, row in df_raw.iterrows():
-    if row.astype(str).str.strip().str.contains("שינוי מצטבר").any():
+    if row.astype(str).str.contains("שינוי מצטבר").any():
         header_row_idx = i
         break
 
@@ -34,7 +35,7 @@ df = df.dropna(subset=["מחיר עלות"])
 # המרת טיקרים לפורמט yfinance
 def convert_ticker(t):
     t = str(t).strip()
-    if t.startswith("XNAS:") or t.startswith("XNAS:"):
+    if t.startswith("XNAS:") or t.startswith("XTAE:"):
         return t.split(":")[1]  # NASDAQ
     elif t.startswith("XLON:"):
         return t.split(":")[1] + ".L"  # LSE
@@ -47,9 +48,9 @@ df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
 if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = None
 
-# פונקציה להצגת גרף
+# פונקציה להצגת גרף מהקנייה ועד היום
 def plot_stock_graph(ticker, cost_price):
-    start_date = datetime.now() - timedelta(days=365)
+    start_date = datetime.now() - timedelta(days=30)  # חודש אחורה
     data = yf.download(ticker, start=start_date, progress=False)
     if data.empty:
         st.warning(f"לא נמצאו נתונים עבור {ticker}")
@@ -59,13 +60,13 @@ def plot_stock_graph(ticker, cost_price):
     try:
         current_price = yf.Ticker(ticker).fast_info["last_price"]
     except:
-        current_price = data["Close"][-1]  # fallback לשער הסגירה האחרון
+        current_price = data["Close"][-1]  # fallback
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=data.index, y=data["Close"], mode='lines', name='שער סגירה'))
-    fig.add_hline(y=cost_price, line=dict(color='red', dash='dash'), name='מחיר עלות')
+    fig.add_hline(y=cost_price, line=dict(color='red', dash='dash'), name='מחיר קנייה')
     fig.update_layout(
-        title=f"{ticker} - מחיר עלות: {cost_price} | מחיר נוכחי: {current_price}",
+        title=f"{ticker} - מחיר קנייה: {cost_price} | מחיר נוכחי: {current_price}",
         xaxis_title="תאריך",
         yaxis_title="שער",
         template="plotly_white",
@@ -73,7 +74,7 @@ def plot_stock_graph(ticker, cost_price):
     )
 
     change_pct = ((current_price - cost_price) / cost_price) * 100
-    st.write(f"**שינוי מצטבר:** {change_pct:.2f}%")
+    st.write(f"**שינוי מצטבר מהקנייה:** {change_pct:.2f}%")
     st.plotly_chart(fig, use_container_width=True)
 
 # יצירת כפתורים בראש העמוד
@@ -84,16 +85,11 @@ for i in range(0, len(df), cols_per_row):
         row = df.iloc[i + j]
         ticker = row["yfinance_ticker"]
         cost_price = row["מחיר עלות"]
-
-        # הכנה של label נקי
         button_label = str(row["טיקר"]).strip()
-        if button_label == "" or button_label.lower() == "nan":
-            continue  # דילוג על שורות ריקות
 
         if col.button(button_label):
             st.session_state.selected_ticker = ticker
             st.session_state.selected_cost_price = cost_price
-
 
 # הצגת הגרף של המניה שנבחרה
 if st.session_state.selected_ticker:
