@@ -111,26 +111,9 @@ def get_stock_data(ticker, period="1y"):
         return data, current_price, info
     except Exception as e:
         return None, None, None
-
-# --- Scroll Function (MODIFIED) ---
-def scroll_down_short():
-    """מזריק קוד JS כדי לגלוש 250 פיקסלים למטה (גלילה עדינה)."""
-    st.markdown(
-        f"""
-        <script>
-            // ממתין מעט לטעינת האלמנטים
-            setTimeout(function() {{
-                // גלילה של 250 פיקסלים למטה. ערך קטן יותר עבור גלילה עדינה.
-                window.scrollBy({{ top: 250, behavior: 'smooth' }});
-            }}, 100); 
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
-    
+        
 # --- Advanced Plotting Function ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
-    # אין צורך בתג עיגון כאן
     
     st.subheader(f"Detailed Analysis: {stock_name}")
     
@@ -313,15 +296,14 @@ for i in range(0, len(df), cols_per_row):
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
                 
-                # אין צורך לקרוא כאן לפונקציית הגלילה
+                # הגלילה האוטומטית בוטלה כאן
 
 st.markdown("---")
 
-# --- Display Selected Stock Analysis (MODIFIED) ---
+# --- Display Selected Stock Analysis ---
 if st.session_state.selected_ticker is not None:
     
-    # *** קריאה לפונקציית הגלילה הקצרה לאחר שהתוכן נטען מחדש ***
-    scroll_down_short()
+    # הגלילה האוטומטית בוטלה כאן
     
     # מציג את הניתוח
     plot_advanced_stock_graph(
