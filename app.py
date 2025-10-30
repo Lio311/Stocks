@@ -92,14 +92,14 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
             index=4,
             format_func=lambda x: {
-                "1w": "7 days",
+                "1w": "1 Week",
                 "1mo": "1 Month",
                 "3mo": "3 Months",
                 "6mo": "6 Months",
                 "1y": "1 Year",
                 "2y": "2 Years",
                 "5y": "5 Years",
-                "all": "ALL History"
+                "all": "All"
             }[x]
         )
         
