@@ -49,11 +49,13 @@ def load_portfolio():
 def convert_ticker(t):
     t_str = str(t).strip()
 
-    # מיפוי מזהים מספריים
+    # מיפוי מזהים מספריים לטיקרים של yfinance (לדוגמה, LSE)
     if t_str == "1183441":
-        return "SPXP.L" # Invesco S&P 500 UCITS ETF (LSE)
+        # נשמר את המספר המקורי כדי שנוכל לזהות אותו לצורך המרה
+        return "1183441"
     elif t_str == "1159250":
-        return "IUSA.L" # iShares $ CORE S&P 500 UCITS (LSE)
+        # נשמר את המספר המקורי כדי שנוכל לזהות אותו לצורך המרה
+        return "1159250" 
     
     # טיפול בפורמטים קיימים
     elif t_str.startswith("XNAS:"):
@@ -101,7 +103,7 @@ def format_large_number(num):
     else:
         return f'{num:.2f}'
 
-# --- NEW: Forex Rate Fetching Function (FIXED) ---
+# --- NEW: Forex Rate Fetching Function ---
 @st.cache_data(ttl=3600) 
 def get_forex_rate(currency_pair="ILS=X"):
     """מושך את שער החליפין הנוכחי (דולר לשקל - USDILS)"""
@@ -112,21 +114,28 @@ def get_forex_rate(currency_pair="ILS=X"):
         
         if rate < 1:
             # אם קיבלנו שער הפוך (כגון 0.27 מ-ILSUSD=X), נהפוך אותו
-            st.warning(f"Forex rate {currency_pair} returned a rate < 1. Inverting rate to 1/rate for USD/ILS conversion.")
             rate = 1 / rate
             
         return rate
     except Exception:
-        st.warning("Could not fetch USD/ILS exchange rate. Using default rate 3.7.")
+        # st.warning("Could not fetch USD/ILS exchange rate. Using default rate 3.7.")
         return 3.7 # שער ידני מקורב
 
 # --- Data Fetching Function ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
+    # אם הטיקרים הם המספרים, צריך להשתמש בטיקרים הממשיים עבור yfinance
+    if ticker == "1183441":
+        yf_ticker = "SPXP.L"
+    elif ticker == "1159250":
+        yf_ticker = "IUSA.L"
+    else:
+        yf_ticker = ticker
+        
     yf_period = '1mo' if period == '1w' else ('max' if period == 'all' else period)
     
     try:
-        stock = yf.Ticker(ticker)
+        stock = yf.Ticker(yf_ticker)
         data = stock.history(period=yf_period)
         info = stock.info
         recommendations = stock.get_recommendations_summary() 
@@ -143,21 +152,25 @@ def get_stock_data(ticker, period="1y"):
         except:
             current_price = data["Close"].iloc[-1]
 
-        # נתוני המחיר ההיסטוריים והנוכחיים מוחזרים כאן גולמיים (באגורות, לפי התיאור שלך)
+        # נתוני המחיר ההיסטוריים והנוכחיים מוחזרים כאן גולמיים
         return data, current_price, info, recommendations, quarterly_earnings
     except Exception as e:
         return None, None, None, None, None
         
-# --- Advanced Plotting Function (UPDATED for Currency Conversion) ---
-def plot_advanced_stock_graph(ticker, cost_price, stock_name):
+# --- Advanced Plotting Function (UPDATED for Conditional Conversion) ---
+def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
+    
+    # 📌 הגדרת טיקרים ישראליים לצורך המרה
+    ILS_TICKERS = ["1159250", "1183441"]
     
     # --- Currency Setup ---
     # משיכת שער חליפין: דולר לשקל (USDILS)
     USD_TO_ILS_RATE = get_forex_rate("ILS=X")
-    st.caption(f"**שער חליפין (USD -> ILS):** $1 = ₪{USD_TO_ILS_RATE:.4f}")
     
+    # --- Load Data ---
+    data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, "1y") # טוענים שנה כברירת מחדל
     
     # Period Selection
     col1, col2 = st.columns([1, 4])
@@ -177,10 +190,11 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
                 "all": "All"
             }[x]
         )
-
-    # Load Data 
-    data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
     
+    # טעינת הנתונים מחדש עם התקופה שנבחרה (הקאש יטפל בכך ביעילות)
+    data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
+
+
     # --- Check for data validity ---
     if data_raw is None or data_raw.empty:
         st.error(f"No historical data found for {ticker}")
@@ -189,28 +203,38 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     if current_price_raw is None:
         st.warning("Could not retrieve current price, using last closing price.")
         current_price_raw = data_raw["Close"].iloc[-1]
+
     
-    # 📌 CONVERSION LOGIC (המרת כל הנתונים לדולר) 📌
+    # 📌 CONVERSION LOGIC (המרת נתונים מותנית) 📌
     
-    # 1. המרת מחיר עלות (שקלים -> דולר)
-    # מחיר עלות בטבלה (ILS) / שער חליפין (ILS/USD)
-    cost_price_usd = cost_price / USD_TO_ILS_RATE 
+    if ticker in ILS_TICKERS:
+        st.caption(f"**מצב: מניה מקומית (ILS) | שער חליפין (USD -> ILS):** $1 = ₪{USD_TO_ILS_RATE:.4f}")
+        
+        # 1. המרת מחיר עלות (שקלים -> דולר)
+        cost_price_usd = cost_price_ils / USD_TO_ILS_RATE
+        
+        # 2. המרת מחיר נוכחי (אגורות -> שקלים -> דולר)
+        current_price_usd = (current_price_raw / 100) / USD_TO_ILS_RATE
+        
+        # 3. המרת נתונים היסטוריים (אגורות -> שקלים -> דולר)
+        data = data_raw.copy()
+        conversion_factor = 1 / (100 * USD_TO_ILS_RATE)
+        
+        for col in ['Open', 'High', 'Low', 'Close']:
+            data[col] = data[col] * conversion_factor
+            
+        display_currency = "USD $"
+
+    else:
+        # מצב: מניה זרה (NASDAQ/LSE) - מחיר העלות בטבלה נחשב USD (או הומרה כבר ידנית)
+        # ונתוני yfinance כבר במטבע זר (נניח USD או מקור).
+        cost_price_usd = cost_price_ils # משתמש במחיר העלות הגולמי כ-USD
+        current_price_usd = current_price_raw
+        data = data_raw
+        display_currency = "USD $" # מניחים שטיקרים זרים הם ב-USD
+
     
-    # 2. המרת מחיר נוכחי (אגורות -> שקלים -> דולר)
-    # נתון מ-yfinance (אגורות) / 100 (שקלים) / שער חליפין (דולרים)
-    current_price_usd = (current_price_raw / 100) / USD_TO_ILS_RATE
-    
-    # 3. המרת נתונים היסטוריים (אגורות -> שקלים -> דולר)
-    data = data_raw.copy()
-    
-    # פקטור המרה: (1/100) * (1/USD_TO_ILS_RATE)
-    conversion_factor = 1 / (100 * USD_TO_ILS_RATE)
-    
-    # המרת כל עמודות המחיר
-    for col in ['Open', 'High', 'Low', 'Close']:
-        data[col] = data[col] * conversion_factor
-    
-    # --- החלפת נתונים בדולר לשימוש בהמשך הקוד ---
+    # --- החלפת נתונים לשימוש בהמשך הקוד ---
     cost_price = cost_price_usd
     current_price = current_price_usd
     
@@ -220,10 +244,10 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     change_abs_rounded = round(change_abs, 3)
     
     # --- Price and Portfolio Metrics ---
-    st.markdown("### Portfolio Performance (USD $)")
+    st.markdown(f"### Portfolio Performance ({display_currency})")
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Cost Price (USD)", f"${cost_price:.2f}")
-    col2.metric("Current Price (USD)", f"${current_price:.2f}", delta=change_abs_rounded)
+    col1.metric("Cost Price", f"${cost_price:.2f}")
+    col2.metric("Current Price", f"${current_price:.2f}", delta=change_abs_rounded)
     
     if change_pct >= 0:
         delta_label = f"+{change_pct:.2f}%"
@@ -246,16 +270,16 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.markdown("---")
     
     # --- Plotly Graph (Now in USD) ---
-    st.markdown("### Price Chart (USD $)")
+    st.markdown(f"### Price Chart ({display_currency})")
     fig = go.Figure()
     color = '#34A853' if change_pct >= 0 else '#EA4335'
     
-    # Closing Price (Uses data converted to USD)
+    # Closing Price (Uses data converted/native USD)
     fig.add_trace(go.Scatter(
         x=data.index,
         y=data["Close"],
         mode='lines',
-        name='Closing Price (USD)',
+        name=f'Closing Price ({display_currency})',
         line=dict(color=color, width=2),
         fill='tozeroy',
         fillcolor=f'rgba({int(color[1:3],16)}, {int(color[3:5],16)}, {int(color[5:7],16)}, 0.15)',
@@ -277,7 +301,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         x=[data.index[-1]],
         y=[current_price],
         mode='markers',
-        name='Current Price (USD)',
+        name=f'Current Price ({display_currency})',
         marker=dict(size=12, color='orange', symbol='star'),
         hovertemplate='<b>Current Price:</b> $%{y:.2f}<extra></extra>'
     ))
@@ -285,7 +309,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     fig.update_layout(
         title={'text': f"{ticker} - Performance Tracking (All values in USD)", 'x':0.5, 'xanchor':'center'},
         xaxis_title="Date",
-        yaxis_title="Price (USD $)",
+        yaxis_title=f"Price ({display_currency})",
         template="plotly_white",
         height=600,
         hovermode='x unified',
@@ -297,7 +321,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.markdown("---") 
     
     # --- Price Statistics (in USD) ---
-    st.markdown("### Price Statistics (USD $)")
+    st.markdown(f"### Price Statistics ({display_currency})")
     col1, col2, col3, col4 = st.columns(4)
     col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
     col2.info(f"**Maximum Price:**\n${data['Close'].max():.2f}")
@@ -305,7 +329,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     col4.info(f"**Volatility (SD):**\n${data['Close'].std():.2f}")
     
     # Recent Data
-    with st.expander("Recent Data (Last 10 Trading Days) - Converted to USD"):
+    with st.expander(f"Recent Data (Last 10 Trading Days) - Converted to {display_currency}"):
         # נתוני הווליום לא עברו המרה כי הם מספרים של יחידות
         recent_data = data[['Open','High','Low','Close']].tail(10).copy()
         recent_data['Volume'] = data_raw['Volume'].tail(10) # שימוש בווליום המקורי
