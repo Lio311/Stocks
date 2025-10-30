@@ -34,9 +34,7 @@ df = df.dropna(subset=["טיקר"])
 
 # ניקוי מתקדם של עמודות מספריות
 for col in ["מחיר עלות", "מחיר זמן אמת"]:
-    # הסרת כל תווים שאינם ספרות, נקודה או מינוס
     df[col] = df[col].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
-    # המרה למספר, המרה ל-NaN אם לא ניתן
     df[col] = pd.to_numeric(df[col], errors='coerce')
 
 # הסרת שורות עם ערכים לא חוקיים
@@ -48,43 +46,51 @@ if not required_cols.issubset(df.columns):
     st.error("יש לוודא שלקובץ יש עמודות: טיקר, מחיר עלות, מחיר זמן אמת")
     st.stop()
 
-# הצגת טבלה מצומצמת
-st.dataframe(df[["טיקר", "מחיר עלות", "מחיר זמן אמת"]])
+# שמירת מצב גרף פתוח
+if "active_ticker" not in st.session_state:
+    st.session_state.active_ticker = None
 
-# טווח זמן לברירת מחדל (שנה אחורה)
-start_date = datetime.now() - timedelta(days=365)
+# פונקציה לפתיחת גרף ולסגירת גרף קודם
+def show_graph(ticker, cost_price, current_price):
+    st.session_state.active_ticker = ticker
 
-# יצירת כפתורים לכל מניה
-for _, row in df.iterrows():
-    ticker = str(row["טיקר"]).strip()
-    cost_price = float(row["מחיר עלות"])
-    current_price = float(row["מחיר זמן אמת"])
+    start_date = datetime.now() - timedelta(days=365)
+    data = yf.download(ticker, start=start_date, progress=False)
+    data.reset_index(inplace=True)
 
-    if st.button(ticker):
-        st.subheader(f"{ticker} - גרף מהשנה האחרונה")
+    if data.empty:
+        st.warning(f"לא נמצאו נתונים עבור {ticker}")
+        return
 
-        # הורדת נתוני שערים
-        data = yf.download(ticker, start=start_date, progress=False)
-        data.reset_index(inplace=True)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=data["Date"], y=data["Close"], mode='lines', name='שער סגירה'))
+    fig.add_hline(y=cost_price, line=dict(color='red', dash='dash'), name='מחיר עלות')
+    fig.update_layout(
+        title=f"{ticker} - מחיר עלות: {cost_price} | מחיר נוכחי: {current_price}",
+        xaxis_title="תאריך",
+        yaxis_title="שער",
+        template="plotly_white",
+        height=600
+    )
 
-        if data.empty:
-            st.warning(f"לא נמצאו נתונים עבור {ticker}")
-            continue
+    change_pct = ((current_price - cost_price) / cost_price) * 100
+    st.write(f"**שינוי מצטבר:** {change_pct:.2f}%")
+    st.plotly_chart(fig, use_container_width=True)
 
-        # יצירת גרף
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=data["Date"], y=data["Close"], mode='lines', name='שער סגירה'))
-        fig.add_hline(y=cost_price, line=dict(color='red', dash='dash'), name='מחיר עלות')
-        fig.update_layout(
-            title=f"{ticker} - מחיר עלות: {cost_price} | מחיר נוכחי: {current_price}",
-            xaxis_title="תאריך",
-            yaxis_title="שער",
-            template="plotly_white",
-            height=600
-        )
+# יצירת כפתורים בשורות של 6 כפתורים לכל שורה
+cols_per_row = 6
+for i in range(0, len(df), cols_per_row):
+    cols = st.columns(min(cols_per_row, len(df) - i))
+    for j, col in enumerate(cols):
+        row = df.iloc[i + j]
+        ticker = str(row["טיקר"]).strip()
+        cost_price = row["מחיר עלות"]
+        current_price = row["מחיר זמן אמת"]
 
-        # הצגת נתונים מספריים
-        change_pct = ((current_price - cost_price) / cost_price) * 100
-        st.write(f"**שינוי מצטבר:** {change_pct:.2f}%")
+        if col.button(ticker):
+            show_graph(ticker, cost_price, current_price)
 
-        st.plotly_chart(fig, use_container_width=True)
+# הצגת הגרף של המניה שנבחרה אם יש אחת פעילה
+if st.session_state.active_ticker:
+    row = df[df["טיקר"] == st.session_state.active_ticker].iloc[0]
+    show_graph(row["טיקר"], row["מחיר עלות"], row["מחיר זמן אמת"])
