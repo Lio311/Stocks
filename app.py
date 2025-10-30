@@ -237,19 +237,17 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     # Recent Data
     with st.expander("Recent Data (Last Trading Days)"):
-        # **FIXED: Use the period selected to limit the recent data table**
+        # **FIXED: Logic to set the limit based on the selected period**
         if period == "1w":
-            # If 7 DAYS is selected, show up to 7 rows
             limit = 7
             header_text = f"Recent Data (Last {limit} Trading Days)"
         else:
-            # Otherwise, use the standard limit of 10 rows
             limit = 10
             header_text = f"Recent Data (Last {limit} Trading Days)"
             
         recent_data = data[['Open', 'High', 'Low', 'Close', 'Volume']].tail(limit).copy()
         
-        st.markdown(f"**{header_text}**") # Update expander title with the limit
+        st.markdown(f"**{header_text}**") 
         
         recent_data.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
         recent_data = recent_data.round(2)
