@@ -14,6 +14,7 @@ st.title("My Stock Portfolio")
 st.markdown("---")
 
 # ודא שנתיב הקובץ הוא נכון
+# **ודאו שקובץ "תיק מניות.xlsx" נמצא באותה תיקייה כמו קובץ הפייתון.**
 file_path = "תיק מניות.xlsx"
 
 # --- Data Loading and Cleaning ---
@@ -71,7 +72,6 @@ if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = None
     st.session_state.selected_cost_price = None
     st.session_state.selected_name = None
-    st.session_state.debug_earnings = None # 📌 חדש: משתנה לשמירת תוצאת הדיבאג
 
 # --- Helper Function for Formatting Large Numbers ---
 def format_large_number(num):
@@ -94,7 +94,7 @@ def format_large_number(num):
     else:
         return f'{num:.2f}'
 
-# --- Data Fetching Function (Updated with Debug) ---
+# --- Data Fetching Function (Clean) ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     yf_period = '1mo' if period == '1w' else ('max' if period == 'all' else period)
@@ -105,9 +105,6 @@ def get_stock_data(ticker, period="1y"):
         info = stock.info
         recommendations = stock.get_recommendations_summary() 
         quarterly_earnings = stock.quarterly_earnings
-        
-        # 📌 נקודת דיבאג 1: שמירת התוצאה הגולמית מ-yfinance
-        st.session_state.debug_earnings = quarterly_earnings
         
         if data.empty:
             return None, None, None, None, None
@@ -122,10 +119,9 @@ def get_stock_data(ticker, period="1y"):
 
         return data, current_price, info, recommendations, quarterly_earnings
     except Exception as e:
-        st.session_state.debug_earnings = f"ERROR: {e}" # שמור את השגיאה לדיבאג
         return None, None, None, None, None
         
-# --- Advanced Plotting Function (Modified & Fixed) ---
+# --- Advanced Plotting Function (Clean) ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
@@ -149,25 +145,10 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             }[x]
         )
 
-    # Load Data (The debug information is loaded into st.session_state here)
+    # Load Data 
     data, current_price, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
     
-    # 📌 נקודת דיבאג 2: הצגת נתוני הרווחים הגולמיים
-    with st.expander("🐛 DEBUG: Quarterly Earnings Raw Data"):
-        if isinstance(st.session_state.debug_earnings, str):
-            st.error(f"Error during data fetching: {st.session_state.debug_earnings}")
-        elif st.session_state.debug_earnings is None:
-            st.warning("quarterly_earnings is None.")
-        elif st.session_state.debug_earnings.empty:
-            st.warning("quarterly_earnings is an empty DataFrame.")
-            st.dataframe(st.session_state.debug_earnings)
-        else:
-            st.success("quarterly_earnings is a valid DataFrame:")
-            st.dataframe(st.session_state.debug_earnings)
-            st.caption(f"Shape: {st.session_state.debug_earnings.shape}")
-    
-    st.markdown("---")
-    
+    # --- Check for data validity ---
     if data is None or data.empty:
         st.error(f"No historical data found for {ticker}")
         return
@@ -176,7 +157,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         st.warning("Could not retrieve current price, using last closing price.")
         current_price = data["Close"].iloc[-1]
         
-    # Calculate Changes (Rest of the code remains the same)
+    # Calculate Changes
     change_abs = current_price - cost_price
     change_pct = (change_abs / cost_price) * 100
     change_abs_rounded = round(change_abs, 3)
@@ -274,7 +255,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     st.markdown("---") 
 
-    # --- Key Fundamental Data (unchanged) ---
+    # --- Key Fundamental Data ---
     st.markdown("### Key Fundamental Data")
     if info is not None:
         market_cap = info.get('marketCap', None)
@@ -319,7 +300,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     st.markdown("---")
     
-    # --- Analyst Recommendations (unchanged) ---
+    # --- Analyst Recommendations ---
     st.markdown("### Analyst Recommendations")
     if recommendations is not None and not recommendations.empty:
         
@@ -342,10 +323,10 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
 
     st.markdown("---")
 
-    # --- Latest Quarterly Earnings Report (unchanged logic) ---
+    # --- Latest Quarterly Earnings Report (Fixed Logic) ---
     st.markdown("### Latest Quarterly Earnings Report")
 
-    # ודא שיש נתונים ושה-DataFrame אינו ריק
+    # ודא שיש נתונים ושה-DataFrame אינו ריק (מטפל במקרה של None או DataFrame ריק)
     if quarterly_earnings is not None and not quarterly_earnings.empty:
         
         try:
@@ -378,7 +359,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     st.markdown("---")
     
-# --- Stock Selection Buttons (unchanged) ---
+# --- Stock Selection Buttons ---
 st.subheader("Select a Stock for Analysis")
 cols_per_row = 6
 for i in range(0, len(df), cols_per_row):
@@ -402,7 +383,7 @@ for i in range(0, len(df), cols_per_row):
 
 st.markdown("---")
 
-# --- Display Selected Stock Analysis (unchanged) ---
+# --- Display Selected Stock Analysis ---
 if st.session_state.selected_ticker is not None:
     
     # מציג את הניתוח
@@ -420,6 +401,6 @@ if st.session_state.selected_ticker is not None:
 else:
     st.info("Select a stock from the list above to see a detailed analysis.")
 
-# --- Footer (unchanged) ---
+# --- Footer ---
 st.markdown("---")
 st.caption(f"Data updated from Yahoo Finance | Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
