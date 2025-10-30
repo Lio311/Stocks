@@ -112,19 +112,16 @@ def get_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None, None
 
-# --- Scroll Function ---
-def scroll_to_element(element_id):
-    """מזריק קוד JS כדי לגלוש לאלמנט ספציפי לפי ה-ID שלו."""
-    # המתן קצרות כדי לוודא ש-Streamlit סיים לעדכן את DOM
+# --- Scroll Function (MODIFIED) ---
+def scroll_down_short():
+    """מזריק קוד JS כדי לגלוש 250 פיקסלים למטה (גלילה עדינה)."""
     st.markdown(
         f"""
         <script>
+            // ממתין מעט לטעינת האלמנטים
             setTimeout(function() {{
-                var element = document.getElementById('{element_id}');
-                if (element) {{
-                    // גלילה חלקה (smooth) למיקום של האלמנט
-                    element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                }}
+                // גלילה של 250 פיקסלים למטה. ערך קטן יותר עבור גלילה עדינה.
+                window.scrollBy({{ top: 250, behavior: 'smooth' }});
             }}, 100); 
         </script>
         """,
@@ -133,7 +130,7 @@ def scroll_to_element(element_id):
     
 # --- Advanced Plotting Function ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
-    # *** הוסר תג ה-HTML מכאן ***
+    # אין צורך בתג עיגון כאן
     
     st.subheader(f"Detailed Analysis: {stock_name}")
     
@@ -288,7 +285,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
     col2.info(f"**Maximum Price:**\n${data['Close'].max():.2f}")
     col3.info(f"**Average Price:**\n${data['Close'].mean():.2f}")
-    col4.info(f"**Volatility (SD):**\n${data['Close'].std():.2f}")
+    col4.info(f"**Volatility (SD):\n${data['Close'].std():.2f}")
     
     # Recent Data
     with st.expander("Recent Data (Last 10 Trading Days)"):
@@ -316,20 +313,15 @@ for i in range(0, len(df), cols_per_row):
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
                 
-                # אין צורך לקרוא כאן לפונקציית הגלילה, נבצע את הגלילה למטה
-                # רק אם הניתוח המפורט מוצג
+                # אין צורך לקרוא כאן לפונקציית הגלילה
 
 st.markdown("---")
 
 # --- Display Selected Stock Analysis (MODIFIED) ---
 if st.session_state.selected_ticker is not None:
     
-    # *** נקודת העיגון החדשה, מיד לאחר הכפתורים ולפני תצוגת הניתוח המפורט ***
-    st.markdown('<a id="analysis_start"></a>', unsafe_allow_html=True)
-    
-    # מפעיל את פונקציית הגלילה כדי להביא את נקודת העיגון (analysis_start) לראש המסך
-    # זה יתרחש לאחר ש-Streamlit יציג את הכפתורים ואת נקודת העיגון.
-    scroll_to_element("analysis_start") 
+    # *** קריאה לפונקציית הגלילה הקצרה לאחר שהתוכן נטען מחדש ***
+    scroll_down_short()
     
     # מציג את הניתוח
     plot_advanced_stock_graph(
