@@ -70,15 +70,14 @@ if "selected_ticker" not in st.session_state:
 def plot_stock_graph(ticker, cost_price):
     """מציג גרף מניה עם קו מחיר עלות וצביעה לפי רווח/הפסד, החל מהתאריך הקרוב ביותר למחיר העלות."""
     
-    # הורדת נתונים ל-5 שנים אחרונות (טווח סביר לחיפוש נקודת כניסה)
-    data = yf.download(ticker, period="5y", progress=False) 
+    # הורדת נתונים לטווח מקסימלי כדי לכסות את כל האפשרויות
+    data = yf.download(ticker, period="max", progress=False) 
     
     if data.empty:
         st.warning(f"לא נמצאו נתונים היסטוריים עבור הטיקר: {ticker}. נסה לוודא את נכונות הטיקר.")
         return
 
     # 1. מציאת תאריך ההתחלה הרלוונטי (התאריך המוקדם ביותר שבו המחיר היה <= מחיר העלות)
-    # מסנן את כל השורות בהן המחיר קטן או שווה למחיר העלות
     dates_at_or_below_cost = data[data["Close"] <= cost_price].index
     
     entry_date_found = not dates_at_or_below_cost.empty
@@ -87,12 +86,12 @@ def plot_stock_graph(ticker, cost_price):
         # התאריך המוקדם ביותר שהמניה נסגרה בו במחיר הקנייה או נמוך ממנו
         relevant_start_date = dates_at_or_below_cost[0]
     else:
-        # אם המחיר תמיד היה גבוה יותר ב-5 השנים האחרונות, נציג את כל ה-5 שנים.
-        relevant_start_date = data.index[0] 
-        st.info("שימו לב: המחיר הנוכחי תמיד היה מעל מחיר העלות ב-5 השנים האחרונות (או שלא נמצאו נתונים רלוונטיים בטווח). מציג את הגרף ל-5 שנים מלאות.")
+        # אם המחיר תמיד היה גבוה יותר (בכל ההיסטוריה), נציג את ה-5 השנים האחרונות כברירת מחדל
+        st.info("שימו לב: המחיר הנוכחי תמיד היה מעל מחיר העלות (בכל ההיסטוריה הזמינה). מציג את הגרף ל-5 שנים אחרונות.")
+        relevant_start_date = datetime.now() - timedelta(days=5*365)
         
     # סינון הנתונים שיוצגו בגרף
-    data_to_plot = data[data.index >= relevant_start_date]
+    data_to_plot = data[data.index >= relevant_start_date].copy()
 
 
     # מחיר נוכחי בזמן אמת (ניסיון ראשון)
@@ -171,6 +170,11 @@ def plot_stock_graph(ticker, cost_price):
             value=f"{change_pct:.2f}%", 
             delta=f"{current_price - cost_price:.2f}"
         )
+    
+    # הגדרת טווח Y דינמי עם מעט מרווח בטחון
+    min_y = min(data_to_plot["Close"].min(), cost_price) * 0.98
+    max_y = max(data_to_plot["Close"].max(), cost_price) * 1.02
+
 
     fig.update_layout(
         title={
@@ -184,7 +188,9 @@ def plot_stock_graph(ticker, cost_price):
         yaxis_title="שער",
         template="plotly_white",
         height=600,
-        margin=dict(l=20, r=20, t=50, b=20)
+        margin=dict(l=20, r=20, t=50, b=20),
+        # הגדרת טווח Y דינמי
+        yaxis_range=[min_y, max_y], 
     )
 
     st.plotly_chart(fig, use_container_width=True)
