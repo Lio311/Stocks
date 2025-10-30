@@ -17,10 +17,7 @@ file_path = "תיק מניות.xlsx"
 # --- Data Loading and Cleaning ---
 @st.cache_data
 def load_portfolio():
-    # Read all rows without a header initially
     df_raw = pd.read_excel(file_path, header=None)
-    
-    # Search for the header row containing "שינוי מצטבר" (Cumulative Change)
     header_row_idx = None
     for i, row in df_raw.iterrows():
         if row.astype(str).str.strip().str.contains("שינוי מצטבר", regex=False).any():
@@ -31,14 +28,8 @@ def load_portfolio():
         return None
         
     df = pd.read_excel(file_path, header=header_row_idx)
-    
-    # Standardize column names (using original Hebrew names for DataFrame access)
     df.columns = [str(col).strip() for col in df.columns]
-    
-    # Drop rows where 'Ticker' or 'Cost Price' is missing
     df = df.dropna(subset=["טיקר", "מחיר עלות"]) 
-    
-    # Clean up Cost Price (removing non-numeric characters except '.' and '-')
     df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
     df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
     df = df.dropna(subset=["מחיר עלות"])
@@ -49,9 +40,9 @@ def load_portfolio():
 def convert_ticker(t):
     t = str(t).strip()
     if t.startswith("XNAS:"):
-        return t.split(":")[1]  # NASDAQ
+        return t.split(":")[1]
     elif t.startswith("XLON:"):
-        return t.split(":")[1] + ".L"  # LSE
+        return t.split(":")[1] + ".L"
     else:
         return t
 
@@ -63,7 +54,6 @@ with st.spinner("Loading portfolio stocks..."):
         st.error("Could not find a header row containing 'Cumulative Change' in the Excel file.")
         st.stop()
         
-    # Map 'Ticker' to a yfinance-compatible ticker
     df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
     st.success(f"Loaded {len(df)} stocks from the portfolio.")
 
@@ -74,14 +64,13 @@ if "selected_ticker" not in st.session_state:
     st.session_state.selected_name = None
 
 # --- Data Fetching Function ---
-@st.cache_data(ttl=300) # Cache data for 5 minutes
+@st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     yf_period = 'max' if period == 'all' else period
     try:
         stock = yf.Ticker(ticker)
         data = stock.history(period=yf_period)
         
-        # Current Price
         try:
             current_price = stock.fast_info["last_price"]
         except:
@@ -98,14 +87,12 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     # Period Selection
     col1, col2 = st.columns([1, 4])
     with col1:
-        # **FIXED: Adjusted default index and added '1w'**
         period = st.selectbox(
             "Display Period:",
             ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
-            index=4, # Defaulting to '1y' (index 4) for safer initial load
-            # English display mapping
+            index=4,
             format_func=lambda x: {
-                "1w": "1 Week", # New option
+                "1w": "1 Week",
                 "1mo": "1 Month",
                 "3mo": "3 Months",
                 "6mo": "6 Months",
@@ -137,16 +124,22 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     with col1:
         st.metric("Cost Price", f"${cost_price:.2f}")
     with col2:
+        # **תיקון: בדיקת ערך שלילי ושימוש בערך מוחלט עבור delta**
         st.metric(
             "Current Price", 
             f"${current_price:.2f}",
-            f"${change_abs:.2f}"
+            value=None, # Streamlit infers delta direction automatically based on 'delta' sign
+            delta=change_abs, # Pass the raw absolute change
+            delta_color="normal" # 'normal' means green for positive, red for negative
         )
     with col3:
+        # **תיקון: בדיקת ערך שלילי ושימוש בערך מוחלט עבור delta**
         st.metric(
             "Cumulative Change",
             f"{change_pct:.2f}%",
-            f"${change_abs:.2f}"
+            value=None,
+            delta=change_abs, # Pass the raw absolute change (to match the image)
+            delta_color="normal" 
         )
     with col4:
         # Display the actual range of data
@@ -163,7 +156,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     st.markdown("---")
     
-    # Create the Plotly Graph
+    # Create the Plotly Graph (Color logic is correct here)
     fig = go.Figure()
     
     # Price Line
@@ -240,7 +233,6 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     # Recent Data
     with st.expander("Recent Data (Last 10 Trading Days)"):
         recent_data = data[['Open', 'High', 'Low', 'Close', 'Volume']].tail(10).copy()
-        # English column names for display
         recent_data.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
         recent_data = recent_data.round(2)
         st.dataframe(recent_data, use_container_width=True)
@@ -249,7 +241,6 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
 st.subheader("Select a Stock for Analysis")
 cols_per_row = 6
 
-# Loop to create buttons
 for i in range(0, len(df), cols_per_row):
     cols = st.columns(cols_per_row)
     for j in range(min(cols_per_row, len(df) - i)):
@@ -260,7 +251,6 @@ for i in range(0, len(df), cols_per_row):
         ticker = row["yfinance_ticker"]
         cost_price = row["מחיר עלות"] 
         
-        # Prepare the clean button label (The Ticker itself)
         button_label = str(row["טיקר"]).strip() 
         if button_label == "" or button_label.lower() == "nan":
             continue
