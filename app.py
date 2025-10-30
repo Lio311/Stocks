@@ -45,7 +45,7 @@ def load_portfolio():
     df = df.dropna(subset=["מחיר עלות"])
     return df
 
-# --- Ticker Conversion for yfinance ---
+# --- Ticker Conversion for yfinance (UPDATED MAPPING) ---
 def convert_ticker(t):
     t_str = str(t).strip()
 
@@ -53,7 +53,7 @@ def convert_ticker(t):
     if t_str == "1183441":
         return "1183441"
     elif t_str == "1159250":
-        return "1159250" 
+        return "1159250" # נשמר כמספר כדי לזהות אותו לצורך המרה
     
     # טיפול בפורמטים קיימים
     elif t_str.startswith("XNAS:"):
@@ -114,16 +114,17 @@ def get_forex_rate(currency_pair="ILS=X"):
             
         return rate
     except Exception:
+        # st.warning("Could not fetch USD/ILS exchange rate. Using default rate 3.7.")
         return 3.7 # שער ידני מקורב
 
-# --- Data Fetching Function (yf_ticker logic) ---
+# --- Data Fetching Function (UPDATED MAPPING) ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     # המרה לטיקר ש-yfinance מכירה
     if ticker == "1183441":
-        yf_ticker = "SPXS.L" # Invesco S&P 500 UCITS ETF (LSE)
+        yf_ticker = "SPXS.L" # Invesco S&P 500 UCITS ETF
     elif ticker == "1159250":
-        yf_ticker = "IUSA.L" # iShares $ CORE S&P 500 UCITS (LSE)
+        yf_ticker = "CSPX.L" # iShares Core S&P 500 UCITS ETF (FIXED)
     else:
         yf_ticker = ticker
         
@@ -196,7 +197,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
         current_price_raw = data_raw["Close"].iloc[-1]
 
     
-    # 📌 CONVERSION LOGIC: רק מחיר עלות מ-ILS ל-USD 📌
+    # 📌 CONVERSION LOGIC 📌
     
     if ticker in ILS_COST_TICKERS:
         # מחיר עלות בשקלים -> המרה לדולר
@@ -206,31 +207,28 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
         # 1. המרת מחיר עלות (שקלים -> דולר)
         cost_price_usd = cost_price_ils / USD_TO_ILS_RATE
         
+        # 2. המחירים מ-YFinance (current/historical) נשארים ללא שינוי (ב-USD, כפי שציינת)
+        current_price_usd = current_price_raw 
+        
     else:
-        # מצב: מניה זרה/רגילה - אין צורך בהמרה למחיר עלות
-        cost_price_usd = cost_price_ils # מחיר עלות גולמי
+        # מצב: מניה זרה/רגילה - אין צורך בהמרה
+        cost_price_usd = cost_price_ils # מחיר עלות גולמי (נניח שהוא כבר ב-USD)
+        current_price_usd = current_price_raw
     
-    # נתונים מ-YFinance (current/historical) נשארים ללא שינוי (Native Currency)
-    current_price_native = current_price_raw 
-    
-    # 📌 FIX: מניחים שגם מחיר זמן אמת מ-Yfinance הוא דולרי לצורך חישוב הרווח 📌
-    # כפי שציינת, המחיר החי הוא למעשה בדולר:
-    current_price_usd = current_price_native 
-
     # 2. חישוב רווחים בדולר (USD) - כעת זה USD מול USD
     change_abs = current_price_usd - cost_price_usd
     change_pct = (change_abs / cost_price_usd) * 100
     change_abs_rounded = round(change_abs, 3)
 
     
-    # --- הצגת המדדים ---
+    # --- הצגת המדדים (הכל בדולר) ---
     
-    st.markdown("### Portfolio Performance (Cost Price in USD $)")
+    st.markdown("### Portfolio Performance (USD $)")
     col1, col2, col3, col4 = st.columns(4)
     # שימוש ב-cost_price_usd
     col1.metric("Cost Price (USD)", f"${cost_price_usd:.2f}") 
-    # שימוש ב-current_price_native (שמוצג כאן כדולר) והדלתא הנכונה
-    col2.metric("Current Price (USD)", f"${current_price_native:.2f}", delta=change_abs_rounded)
+    # שימוש ב-current_price_raw (שצוין כדולר) עם הדלתא הנכונה
+    col2.metric("Current Price (USD)", f"${current_price_raw:.2f}", delta=change_abs_rounded)
     
     if change_pct >= 0:
         delta_label = f"+{change_pct:.2f}%"
@@ -253,7 +251,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     
     st.markdown("---")
     
-    # --- Plotly Graph (Native Currency, now treated as USD) ---
+    # --- Plotly Graph (USD) ---
     st.markdown("### Price Chart (USD $)")
     fig = go.Figure()
     color = '#34A853' if change_pct >= 0 else '#EA4335'
@@ -283,7 +281,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     # Current Price Marker (in USD)
     fig.add_trace(go.Scatter(
         x=[data_raw.index[-1]],
-        y=[current_price_native],
+        y=[current_price_usd],
         mode='markers',
         name='Current Price (USD)',
         marker=dict(size=12, color='orange', symbol='star'),
