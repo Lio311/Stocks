@@ -232,11 +232,13 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
 st.subheader("🎯 בחר מניה לניתוח")
 
 cols_per_row = 6
-buttons_created = 0
 
 for i in range(0, len(df), cols_per_row):
     cols = st.columns(cols_per_row)
     for j in range(min(cols_per_row, len(df) - i)):
+        if i + j >= len(df):
+            break
+            
         row = df.iloc[i + j]
         ticker = row["yfinance_ticker"]
         cost_price = row["מחיר עלות"]
@@ -246,15 +248,31 @@ for i in range(0, len(df), cols_per_row):
         if button_label == "" or button_label.lower() == "nan":
             continue
         
-        # חישוב מהיר של שינוי (אם קיים במצב)
-        button_text = button_label
-        
-        if cols[j].button(button_text, key=f"btn_{i}_{j}", use_container_width=True):
-            st.session_state.selected_ticker = ticker
-            st.session_state.selected_cost_price = cost_price
-            st.session_state.selected_name = button_label
-            st.rerun()
-        
-        buttons_created += 1
+        with cols[j]:
+            if st.button(button_label, key=f"btn_{ticker}_{i}_{j}", use_container_width=True):
+                st.session_state.selected_ticker = ticker
+                st.session_state.selected_cost_price = cost_price
+                st.session_state.selected_name = button_label
 
 st.markdown("---")
+
+# הצגת הגרף של המניה שנבחרה
+if st.session_state.selected_ticker is not None:
+    plot_advanced_stock_graph(
+        st.session_state.selected_ticker,
+        st.session_state.selected_cost_price,
+        st.session_state.selected_name
+    )
+    
+    # כפתור לניקוי הבחירה
+    if st.button("🔙 חזרה לרשימת המניות", key="back_button"):
+        st.session_state.selected_ticker = None
+        st.session_state.selected_cost_price = None
+        st.session_state.selected_name = None
+        st.rerun()
+else:
+    st.info("👆 בחר מניה מהרשימה למעלה כדי לראות ניתוח מפורט")
+
+# footer
+st.markdown("---")
+st.caption(f"💡 נתונים מתעדכנים מ-Yahoo Finance | עודכן: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
