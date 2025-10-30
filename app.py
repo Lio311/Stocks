@@ -70,57 +70,37 @@ if "selected_ticker" not in st.session_state:
 def plot_stock_graph(ticker, cost_price):
     """מציג גרף מניה עם קו מחיר עלות וצביעה לפי רווח/הפסד, עם דגש על מראה נקי (כמו בתמונה)."""
     
-    # הורדת נתונים לטווח של 5 שנים אחרונות כברירת מחדל
-    # בחרתי ב-5 שנים כדי לאפשר איתור מחיר קנייה ישן, אך נציג רק את החודש האחרון.
-    data = yf.download(ticker, period="5y", progress=False) 
+    # *** שינוי: הורדת נתונים שעתית (1h) עבור 30 הימים האחרונים בלבד ***
+    # נתונים שעה-שעה ייראו רציפים יותר מנתוני סגירה יומיים.
+    # yfinance לא תומך ב-period="5y" עם interval="1h", לכן נשתמש בטווח קצר ונתעלם מחישוב entry_date_found
+    # לצורך הצגה ויזואלית נקייה, אך נחשב רווח/הפסד על בסיס המחיר הנוכחי מול מחיר העלות.
+    data = yf.download(ticker, period="30d", interval="1h", progress=False) 
     
     if data.empty:
-        st.warning(f"לא נמצאו נתונים היסטוריים עבור הטיקר: {ticker}. נסה לוודא את נכונות הטיקר.")
-        return
+        st.warning(f"לא נמצאו נתונים היסטוריים עבור הטיקר: {ticker} ב-30 הימים האחרונים (בתדירות שעתית).")
+        # אם אין נתונים שעה-שעה, ננסה נתונים יומיים רגילים לשנה האחרונה
+        data = yf.download(ticker, period="1y", interval="1d", progress=False)
+        if data.empty:
+             st.warning(f"לא נמצאו נתונים יומיים עבור הטיקר: {ticker}.")
+             return
 
-    # מציאת תאריך ההתחלה הרלוונטי לצורך חישובים
-    dates_at_or_below_cost = data[data["Close"] <= cost_price].index
-    
-    # 1. מציאת תאריך ההתחלה הרלוונטי (התאריך המוקדם ביותר שבו המחיר היה <= מחיר העלות)
-    entry_date_found = not dates_at_or_below_cost.empty
-    
-    if entry_date_found:
-        # התאריך המוקדם ביותר שהמניה נסגרה בו במחיר הקנייה או נמוך ממנו
-        calculation_start_date = dates_at_or_below_cost[0]
-    else:
-        # אם המחיר תמיד היה גבוה יותר, נשתמש ב-5 שנים לצורך החישוב
-        calculation_start_date = datetime.now() - timedelta(days=5*365)
-        
-    # סינון הנתונים לצורך הצגה: נציג רק את החודש האחרון כדי לדמות "זום"
-    display_start_date = datetime.now() - timedelta(days=30)
-    data_to_plot = data[data.index >= display_start_date].copy()
+    data_to_plot = data.copy()
     
     # *** בדיקה קפדנית יותר לאחר הסינון ***
     if data_to_plot.empty:
-        st.error(f"לא נמצאו נתונים היסטוריים להצגה עבור הטיקר {ticker} בחודש האחרון. ייתכן ואין מסחר.")
+        st.error(f"לא נמצאו נתונים היסטוריים להצגה עבור הטיקר {ticker}.")
         return
 
     # מחיר נוכחי בזמן אמת (ניסיון ראשון)
     try:
         current_price = yf.Ticker(ticker).fast_info["last_price"]
     except Exception:
-        # אם אין מידע "מהיר", השתמש בשער הסגירה האחרון מתוך הנתונים שהורדו
+        # אם אין מידע "מהיר", השתמש בשער הסגירה/סוף התקופה האחרון מתוך הנתונים שהורדו
         current_price = data_to_plot["Close"].iloc[-1] 
     
-    # חישוב נתוני רווח/הפסד (באמצעות כלל הנתונים שנמצאו)
-    data_for_calc = data[data.index >= calculation_start_date].copy()
     
-    # מחיר כניסה משוער, לצורך חישובים:
-    # נניח שזה מחיר העלות אם נמצא תאריך, או מחיר הסגירה ביום תחילת החישוב אם לא
-    if entry_date_found:
-        # אם מצאנו תאריך רלוונטי, נשתמש במחיר העלות שנתן המשתמש
-        entry_price = cost_price
-    else:
-        # אם לא מצאנו, נשתמש במחיר העלות שהוזן, אך נציין שהרווח הוא מהתחלה
-        entry_price = cost_price
-
     # חישוב שינוי מצטבר
-    change_pct = ((current_price - entry_price) / entry_price) * 100
+    change_pct = ((current_price - cost_price) / cost_price) * 100
     
     # קביעת צבע קו המניה בהתאם לרווח/הפסד
     # צבע קו ומילוי: ירוק כהה / אדום כהה
@@ -140,9 +120,6 @@ def plot_stock_graph(ticker, cost_price):
         fillcolor=fill_color # צבע המילוי
     ))
 
-    # *** שינוי: הסרת קו מחיר עלות וסמנים מהגרף כדי לדמות מראה נקי יותר ***
-    # הנתונים הללו עדיין מוצגים ב-Metrics.
-
     # עדכון פריסת הגרף
     st.markdown(f"### {ticker} - ניתוח ביצועים")
     
@@ -160,7 +137,6 @@ def plot_stock_graph(ticker, cost_price):
          st.metric(label="מחיר עלות", value=f"{cost_price:.2f}")
     
     # הגדרת טווח Y דינמי עם מעט מרווח בטחון
-    
     close_prices = data_to_plot["Close"].dropna()
     
     if close_prices.empty:
@@ -175,7 +151,7 @@ def plot_stock_graph(ticker, cost_price):
 
     fig.update_layout(
         title={
-            'text': f"תנודת המניה {ticker} (30 יום אחרונים)",
+            'text': f"תנודת המניה {ticker} (30 יום אחרונים, שעה-שעה)",
             'y':0.95,
             'x':0.5,
             'xanchor': 'center',
@@ -187,7 +163,7 @@ def plot_stock_graph(ticker, cost_price):
         height=600,
         margin=dict(l=20, r=20, t=50, b=20),
         # הסרת קווי רשת אופקיים/אנכיים למראה נקי
-        xaxis=dict(showgrid=False),
+        xaxis=dict(showgrid=False, tickformat="%H:%M\n%b %d"), # *** שינוי: פורמט תצוגת שעה ותאריך ***
         yaxis=dict(showgrid=False),
         # הגדרת טווח Y דינמי
         yaxis_range=[min_y, max_y], 
@@ -197,15 +173,15 @@ def plot_stock_graph(ticker, cost_price):
 
 # פונקציה להצגת גרף רגיל של מניית גוגל (GOOG)
 def plot_standard_google_graph():
-    """מציג גרף סטנדרטי של GOOG לחודש האחרון (כמו בתמונה)."""
+    """מציג גרף סטנדרטי של GOOG לחודש האחרון (שעה-שעה)."""
     st.markdown("---")
-    st.markdown("### 📈 גרף ייחוס סטנדרטי: Alphabet (GOOG) - 30 יום אחרונים")
+    st.markdown("### 📈 גרף ייחוס סטנדרטי: Alphabet (GOOG) - 30 יום אחרונים (שעה-שעה)")
     
-    start_date = datetime.now() - timedelta(days=30) # טווח של 30 יום
-    data = yf.download("GOOG", start=start_date, progress=False)
+    # *** שינוי: הורדת נתונים שעתית (1h) עבור 30 הימים האחרונים ***
+    data = yf.download("GOOG", period="30d", interval="1h", progress=False) 
     
     if data.empty:
-        st.warning("לא ניתן לטעון נתונים עבור GOOG.")
+        st.warning("לא ניתן לטעון נתונים עבור GOOG בתדירות שעתית.")
         return
 
     # צבע ירוק-כחול סטנדרטי לגרף הייחוס
@@ -230,7 +206,8 @@ def plot_standard_google_graph():
         template="plotly_white",
         height=400,
         margin=dict(l=20, r=20, t=50, b=20),
-        xaxis=dict(showgrid=False),
+        # הסרת קווי רשת והתאמת ציר X לשעה
+        xaxis=dict(showgrid=False, tickformat="%H:%M\n%b %d"), # *** שינוי: פורמט תצוגת שעה ותאריך ***
         yaxis=dict(showgrid=False),
     )
     st.plotly_chart(fig, use_container_width=True)
