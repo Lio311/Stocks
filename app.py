@@ -91,9 +91,8 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     with col1:
         period = st.selectbox(
             "Display Period:",
-            ["7d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
+            ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
             index=4,
-            # **UPDATED: '1 Week' changed to '7 DAYS'**
             format_func=lambda x: {
                 "1w": "7 DAYS",
                 "1mo": "1 Month",
@@ -148,22 +147,21 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             delta=change_abs_rounded 
         )
     with col4:
-        # Display the actual range of data
+        # Determine the data period display
         time_delta = data.index[-1] - data.index[0]
         if time_delta.days > 365:
             display_period = f"{time_delta.days // 365} Years"
         elif time_delta.days > 30:
             display_period = f"{time_delta.days // 30} Months"
         elif time_delta.days >= 7:
-            # **Change 'Weeks' to 'Days' for consistency if displaying less than a week**
-            display_period = f"{time_delta.days} Days" if time_delta.days < 7 else f"{time_delta.days // 7} Weeks" 
+            display_period = f"{time_delta.days // 7} Weeks" if time_delta.days > 7 else f"{time_delta.days} Days"
         else:
             display_period = f"{time_delta.days} Days"
         st.metric("Data Period", display_period)
         
     st.markdown("---")
     
-    # Create the Plotly Graph (Color logic is correct here)
+    # Create the Plotly Graph
     fig = go.Figure()
     
     # Price Line
@@ -238,8 +236,21 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         st.info(f"**Volatility (SD):**\n${volatility:.2f}")
         
     # Recent Data
-    with st.expander("Recent Data (Last 10 Trading Days)"):
-        recent_data = data[['Open', 'High', 'Low', 'Close', 'Volume']].tail(10).copy()
+    with st.expander("Recent Data (Last Trading Days)"):
+        # **FIXED: Use the period selected to limit the recent data table**
+        if period == "1w":
+            # If 7 DAYS is selected, show up to 7 rows
+            limit = 7
+            header_text = f"Recent Data (Last {limit} Trading Days)"
+        else:
+            # Otherwise, use the standard limit of 10 rows
+            limit = 10
+            header_text = f"Recent Data (Last {limit} Trading Days)"
+            
+        recent_data = data[['Open', 'High', 'Low', 'Close', 'Volume']].tail(limit).copy()
+        
+        st.markdown(f"**{header_text}**") # Update expander title with the limit
+        
         recent_data.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
         recent_data = recent_data.round(2)
         st.dataframe(recent_data, use_container_width=True)
