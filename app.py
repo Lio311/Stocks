@@ -3,12 +3,27 @@ import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+# יש להתקין: pip install openai
+from openai import OpenAI 
 
 # --- App Configuration ---
 st.set_page_config(
     page_title="My Stock Portfolio",
     layout="wide"
 )
+
+# הגדרת מפתח API של OpenAI כאן (או כסוד ב-Streamlit)
+# 🚨 החלף את "YOUR_OPENAI_API_KEY_HERE" במפתח האמיתי שלך
+OPENAI_API_KEY = "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"
+
+# יצירת לקוח OpenAI
+if OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_OPENAI_API_KEY_HERE":
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+else:
+    # אם המפתח חסר, נשתמש בלקוח מדמה או ניתן הודעת שגיאה
+    openai_client = None
+    st.warning("⚠️ Please insert your OpenAI API Key in the code to enable AI summary feature.")
+
 
 st.title("My Stock Portfolio")
 st.markdown("---")
@@ -87,6 +102,32 @@ def format_large_number(num):
     else:
         return f'{num:.2f}'
 
+##### חדש: אינטגרציה עם OpenAI #####
+def generate_ai_summary(text, ticker, client):
+    """שולח טקסט ארוך ל-OpenAI API כדי לקבל סיכום קצר ובהיר."""
+    if client is None:
+        return "AI summary not available. Please provide an OpenAI API key."
+        
+    prompt = (
+        f"Based on the following business summary for the stock {ticker}, provide a concise summary "
+        f"in Hebrew, focusing on the company's main business sectors and competitive advantage. "
+        f"Limit the response to two paragraphs (max 100 words):\n\n{text}"
+    )
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",  # ניתן להשתמש ב-gpt-4o לתוצאות טובות יותר
+            messages=[
+                {"role": "system", "content": "You are a professional financial analyst assistant, summarizing company descriptions."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=200
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error generating AI summary: {e}"
+################################################
+
 # --- Data Fetching Function (Updated) ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
@@ -149,7 +190,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             }[x]
         )
 
-    # Load Data (Updated to retrieve 5 values)
+    # Load Data 
     data, current_price, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
     
     if data is None or data.empty:
@@ -245,7 +286,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.markdown("---") # מפריד אחרי הגרף
     
-    # --- Price Statistics (MOVED TO HERE) ---
+    # --- Price Statistics ---
     st.markdown("### Price Statistics")
     col1, col2, col3, col4 = st.columns(4)
     col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
@@ -287,9 +328,17 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         f2_col3.metric("**Avg. Volume**", format_large_number(info.get('averageVolume10days', None)))
         f2_col4.metric("**Div. Yield**", f"{dividend_yield*100:.2f}%" if dividend_yield else "N/A")
 
-        # הוספת תיאור החברה
-        with st.expander("Company Description"):
-            st.markdown(info.get('longBusinessSummary', 'No description available.'))
+        # הוספת תיאור החברה + סיכום AI
+        with st.expander("Company Description and AI Summary"):
+            company_description = info.get('longBusinessSummary', 'No description available.')
+            st.markdown("#### AI-Generated Summary")
+            
+            # ##### חדש: קריאה לפונקציית הסיכום של OpenAI #####
+            ai_summary = generate_ai_summary(company_description, ticker, openai_client)
+            st.info(ai_summary)
+            
+            st.markdown("#### Full Description (Source: Yahoo Finance)")
+            st.markdown(company_description)
             
     else:
         st.info("Fundamental data is not available for this stock.")
