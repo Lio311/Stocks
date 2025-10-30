@@ -84,27 +84,27 @@ def get_stock_data(ticker, period="1y"):
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.subheader(f"Detailed Analysis: {stock_name}")
     
-# Period Selection
-col1, col2 = st.columns([1, 4])
-with col1:
-    period = st.selectbox(
-        "Display Period:",
-        # שמירה על המפתח '1w' עבור yfinance
-        ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
-        # שימוש בברירת מחדל '1y' (אינדקס 4) לטעינה בטוחה
-        index=4,
-        format_func=lambda x: {
-            # שינוי התצוגה של '1w' ל-7 DAYS, כפי שביקשת קודם
-            "1w": "7 DAYS",
-            "1mo": "1 Month",
-            "3mo": "3 Months",
-            "6mo": "6 Months",
-            "1y": "1 Year",
-            "2y": "2 Years",
-            "5y": "5 Years",
-            "all": "All"
-        }[x]
-    )
+    # Period Selection
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        period = st.selectbox(
+            "Display Period:",
+            # שמירה על המפתח '1w' עבור yfinance
+            ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
+            # שימוש בברירת מחדל '1y' (אינדקס 4) לטעינה בטוחה
+            index=4,
+            format_func=lambda x: {
+                # שינוי התצוגה של '1w' ל-7 DAYS, כפי שביקשת קודם
+                "1w": "7 DAYS",
+                "1mo": "1 Month",
+                "3mo": "3 Months",
+                "6mo": "6 Months",
+                "1y": "1 Year",
+                "2y": "2 Years",
+                "5y": "5 Years",
+                "all": "All"
+            }[x]
+        )
         
     # Load Data
     data, current_price = get_stock_data(ticker, period)
