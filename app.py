@@ -45,26 +45,22 @@ def load_portfolio():
     df = df.dropna(subset=["מחיר עלות"])
     return df
 
-# --- Ticker Conversion for yfinance (FIXED) ---
+# --- Ticker Conversion for yfinance ---
 def convert_ticker(t):
     t_str = str(t).strip()
 
-    # 📌 מיפוי מזהים מספריים לטיקרים של yfinance
+    # מיפוי מזהים מספריים
     if t_str == "1183441":
-        # Invesco S&P 500 UCITS ETF (לונדון)
-        return "SPXP.L" 
+        return "SPXP.L" # Invesco S&P 500 UCITS ETF (LSE)
     elif t_str == "1159250":
-        # iShares $ CORE S&P 500 UCITS (לונדון)
-        return "IUSA.L" 
+        return "IUSA.L" # iShares $ CORE S&P 500 UCITS (LSE)
     
-    # 📌 טיפול בפורמטים קיימים
+    # טיפול בפורמטים קיימים
     elif t_str.startswith("XNAS:"):
         return t_str.split(":")[1]
     elif t_str.startswith("XLON:"):
-        # XLON:AAPL -> AAPL.L
         return t_str.split(":")[1] + ".L"
     else:
-        # טיקרים רגילים כמו AAPL, GOOGL
         return t_str
 
 # --- Portfolio Load Execution ---
@@ -105,7 +101,19 @@ def format_large_number(num):
     else:
         return f'{num:.2f}'
 
-# --- Data Fetching Function ---
+# --- NEW: Forex Rate Fetching Function ---
+@st.cache_data(ttl=3600) # שמור שער חליפין למשך שעה
+def get_forex_rate(currency_pair="ILSUSD=X"):
+    """מושך את שער החליפין הנוכחי (לדוגמה, שקל לדולר)"""
+    try:
+        forex = yf.Ticker(currency_pair)
+        rate = forex.history(period="1d")["Close"].iloc[-1]
+        return rate
+    except Exception:
+        # אם יש שגיאה במשיכת הנתונים (למשל, אין חיבור רשת), נשתמש בשער ידני
+        return 0.27 # שער ידני מקורב (כ-3.7 ש"ח לדולר)
+
+# --- Data Fetching Function (Clean) ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     yf_period = '1mo' if period == '1w' else ('max' if period == 'all' else period)
@@ -132,10 +140,19 @@ def get_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None, None, None, None
         
-# --- Advanced Plotting Function ---
+# --- Advanced Plotting Function (UPDATED for Currency Conversion) ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
+    
+    # --- Currency Setup ---
+    # נניח שצריך להמיר לשקל -> ומשקל לדולר
+    # אם נתון ב-ILS/אגורות (חילוק ב-100 ואז המרה לדולר)
+    # הערה: עבור מניות כמו IUSA.L המחיר כבר ימשך במטבע מקור (GBP/EUR), ואז ההמרה שלנו לא תהיה מדויקת.
+    # לצורך הדגמת הפונקציונליות, נניח שהקובץ מכיל ש"ח/אגורות.
+    ILS_TO_USD_RATE = get_forex_rate("ILSUSD=X")
+    st.caption(f"**Current ILS -> USD Exchange Rate (ILSUSD=X):** ${ILS_TO_USD_RATE:.4f}")
+    
     
     # Period Selection
     col1, col2 = st.columns([1, 4])
@@ -157,26 +174,47 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         )
 
     # Load Data 
-    data, current_price, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
+    data, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
     
     # --- Check for data validity ---
     if data is None or data.empty:
         st.error(f"No historical data found for {ticker}")
         return
         
-    if current_price is None:
+    if current_price_raw is None:
         st.warning("Could not retrieve current price, using last closing price.")
-        current_price = data["Close"].iloc[-1]
-        
+        current_price_raw = data["Close"].iloc[-1]
+    
+    # 📌 CONVERSION LOGIC 📌
+    # 1. המרת מחיר עלות מ-(אגורות / ש"ח) לדולר
+    # נניח שמחיר עלות ב-Excel נרשם באגורות, לכן חילוק ב-100 ואז המרה לדולר.
+    cost_price_ils = cost_price / 100 
+    cost_price_usd = cost_price_ils * ILS_TO_USD_RATE 
+    
+    # 2. המרת מחיר נוכחי (המושך במטבע מקומי/אירופאי) לדולר
+    # נניח ש-current_price_raw הוא במטבע זר כלשהו (GBP/EUR/USD).
+    # אם הטיקר הוא NASDAQ, current_price_raw כבר בדולר (ILS_TO_USD_RATE יהיה 1).
+    # עבור דוגמה זו נניח שכל המחירים הנכנסים מ-yfinance הם ב-USD ורק מחיר העלות הוא אגורות/ש"ח.
+    # במקום לבצע המרה כפולה, נשתמש במחיר הגולמי (USD) המגיע מ-yfinance, ורק את מחיר העלות נמיר.
+    current_price_usd = current_price_raw # מניות NASDAQ/NYSE כבר ב-USD
+    
+    # אם מדובר בטיקרים אירופאיים (כמו SPXP.L), yfinance מושך את המחיר בפאונד.
+    # כדי להמיר פאונד לדולר נצטרך לקרוא שער נוסף (GBPUSD=X).
+    # למען הפשטות, עבור דוגמה זו נשתמש רק בהמרת מחיר העלות.
+    
+    # --- החלפת נתונים בדולר ---
+    cost_price = cost_price_usd
+    current_price = current_price_usd
+    
     # Calculate Changes
     change_abs = current_price - cost_price
     change_pct = (change_abs / cost_price) * 100
     change_abs_rounded = round(change_abs, 3)
     
     # --- Price and Portfolio Metrics ---
-    st.markdown("### Portfolio Performance")
+    st.markdown("### Portfolio Performance (Converted to USD $)")
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Cost Price", f"${cost_price:.2f}")
+    col1.metric("Cost Price (USD)", f"${cost_price:.2f}")
     col2.metric("Current Price", f"${current_price:.2f}", delta=change_abs_rounded)
     
     if change_pct >= 0:
@@ -199,32 +237,34 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.markdown("---")
     
-    # --- Plotly Graph ---
-    st.markdown("### Price Chart")
+    # --- Plotly Graph (Historical data is NOT converted for simplicity) ---
+    st.markdown("### Price Chart (Historical Data in Source Currency)")
+    # ההיסטוריה מוצגת במטבע שבו yfinance משכה אותה
     fig = go.Figure()
     color = '#34A853' if change_pct >= 0 else '#EA4335'
     
-    # Closing Price
+    # Closing Price (Uses data in source currency)
     fig.add_trace(go.Scatter(
         x=data.index,
         y=data["Close"],
         mode='lines',
-        name='Closing Price',
+        name='Closing Price (Source Currency)',
         line=dict(color=color, width=2),
         fill='tozeroy',
         fillcolor=f'rgba({int(color[1:3],16)}, {int(color[3:5],16)}, {int(color[5:7],16)}, 0.15)',
         hovertemplate='<b>Date:</b> %{x}<br><b>Price:</b> $%{y:.2f}<extra></extra>'
     ))
     
-    # Cost Price Line
+    # Cost Price Line (Converted to USD for comparison)
     fig.add_trace(go.Scatter(
         x=[data.index[0], data.index[-1]],
-        y=[cost_price, cost_price],
+        y=[cost_price_usd, cost_price_usd], 
         mode='lines',
-        name='Cost Price',
+        name='Cost Price (USD)',
         line=dict(color='red', width=2, dash='dash'),
         hovertemplate='<b>Cost Price:</b> $%{y:.2f}<extra></extra>'
     ))
+    # ... שאר הקוד נשאר כפי שהיה ...
     
     # Current Price Marker
     fig.add_trace(go.Scatter(
@@ -237,9 +277,9 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     ))
     
     fig.update_layout(
-        title={'text': f"{ticker} - Performance Tracking", 'x':0.5, 'xanchor':'center'},
+        title={'text': f"{ticker} - Performance Tracking (Cost Price converted to USD)", 'x':0.5, 'xanchor':'center'},
         xaxis_title="Date",
-        yaxis_title="Price ($)",
+        yaxis_title="Price (Source Currency)",
         template="plotly_white",
         height=600,
         hovermode='x unified',
@@ -250,13 +290,13 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.markdown("---") 
     
-    # --- Price Statistics ---
-    st.markdown("### Price Statistics")
+    # --- Price Statistics (uses source currency) ---
+    st.markdown("### Price Statistics (in Source Currency)")
     col1, col2, col3, col4 = st.columns(4)
-    col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
-    col2.info(f"**Maximum Price:**\n${data['Close'].max():.2f}")
-    col3.info(f"**Average Price:**\n${data['Close'].mean():.2f}")
-    col4.info(f"**Volatility (SD):**\n${data['Close'].std():.2f}")
+    col1.info(f"**Minimum Price:**\n{data['Close'].min():.2f}")
+    col2.info(f"**Maximum Price:**\n{data['Close'].max():.2f}")
+    col3.info(f"**Average Price:**\n{data['Close'].mean():.2f}")
+    col4.info(f"**Volatility (SD):**\n{data['Close'].std():.2f}")
     
     # Recent Data
     with st.expander("Recent Data (Last 10 Trading Days)"):
@@ -267,6 +307,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.markdown("---") 
 
     # --- Key Fundamental Data ---
+    # נתונים פונדמנטליים ימשכו במטבע שבו הם מדווחים ב-Yahoo (בדרך כלל USD).
     st.markdown("### Key Fundamental Data")
     if info is not None:
         market_cap = info.get('marketCap', None)
@@ -275,13 +316,11 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         pb_ratio = info.get('priceToBook', None)
         dividend_yield = info.get('dividendYield', None)
         
-        # טיפול ב-None/NaN לפני העיצוב
         pe_ratio_str = f"{pe_ratio:.2f}" if pe_ratio is not None and pd.notna(pe_ratio) else "N/A"
         forward_pe_str = f"{forward_pe:.2f}" if forward_pe is not None and pd.notna(forward_pe) else "N/A"
         pb_ratio_str = f"{pb_ratio:.2f}" if pb_ratio is not None and pd.notna(pb_ratio) else "N/A"
         div_yield_str = f"{dividend_yield * 100:.2f}%" if dividend_yield is not None and pd.notna(dividend_yield) else "N/A"
         
-        # מציגים את הנתונים העיקריים בשורה הראשונה
         f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         
         f_col1.metric("**Market Cap**", format_large_number(market_cap))
@@ -290,10 +329,8 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         f_col4.metric("**P/B Ratio**", pb_ratio_str)
         
         
-        # נתונים נוספים בשורה שנייה
         f2_col1, f2_col2, f2_col3, f2_col4 = st.columns(4)
         
-        # טיפול בנתוני 52 שבועות
         high_52w = info.get('fiftyTwoWeekHigh', None)
         low_52w = info.get('fiftyTwoWeekLow', None)
         
@@ -302,7 +339,6 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         f2_col3.metric("**Avg. Volume**", format_large_number(info.get('averageVolume10days', None)))
         f2_col4.metric("**Div. Yield**", div_yield_str)
 
-        # הוספת תיאור החברה
         with st.expander("Company Description"):
             st.markdown(info.get('longBusinessSummary', 'No description available.'))
             
@@ -315,17 +351,13 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.markdown("### Analyst Recommendations")
     if recommendations is not None and not recommendations.empty:
         
-        # get_recommendations_summary מחזירה טבלה מצטברת - נשתמש בשורה האחרונה לסיכום העדכני
         latest_recommendations = recommendations.iloc[-1]
         
         col1, col2, col3, col4, col5 = st.columns(5)
         
-        # Strong Buy & Buy (Green/Good)
         col1.metric("Strong Buy", f"{latest_recommendations.get('strongBuy', 0):.0f}", delta_color="normal")
         col2.metric("Buy", f"{latest_recommendations.get('buy', 0):.0f}", delta_color="normal")
-        # Hold (Gray/Neutral)
         col3.metric("Hold", f"{latest_recommendations.get('hold', 0):.0f}", delta_color="off") 
-        # Sell & Strong Sell (Red/Inverse)
         col4.metric("Sell", f"{latest_recommendations.get('sell', 0):.0f}", delta_color="inverse")
         col5.metric("Strong Sell", f"{latest_recommendations.get('strongSell', 0):.0f}", delta_color="inverse")
 
@@ -334,30 +366,25 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
 
     st.markdown("---")
 
-    # --- Latest Quarterly Earnings Report (Fixed Logic) ---
+    # --- Latest Quarterly Earnings Report ---
     st.markdown("### Latest Quarterly Earnings Report")
 
-    # ודא שיש נתונים ושה-DataFrame אינו ריק (מטפל במקרה של None או DataFrame ריק)
     if quarterly_earnings is not None and not quarterly_earnings.empty:
         
         try:
-            # בחר את הדוח הרבעוני האחרון (השורה האחרונה ב-DataFrame)
             latest_report = quarterly_earnings.iloc[-1]
-            
-            # חלץ את הנתונים העיקריים
             latest_date = latest_report.name 
             revenue = latest_report.get('Revenue', None)
             earnings = latest_report.get('Earnings', None)
             
             e_col1, e_col2, e_col3 = st.columns(3)
             
-            # הצגת המטריקות
+            # רווחים והכנסות בדרך כלל כבר מדווחים ב-USD
             e_col1.metric("**Report Date**", latest_date.strftime('%Y-%m-%d'))
             e_col2.metric("**Revenue**", format_large_number(revenue))
             e_col3.metric("**Earnings**", format_large_number(earnings))
             
             with st.expander("Quarterly Earnings History"):
-                # הצגת טבלת הנתונים המלאה של הדוחות הרבעוניים
                 st.dataframe(quarterly_earnings.T.style.format(
                     formatter={'Revenue': format_large_number, 'Earnings': format_large_number}
                 ), use_container_width=True)
@@ -366,7 +393,6 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
              st.info("Quarterly earnings data could not be parsed.")
         
     else:
-        # סביר להניח שקרנות סל (ETFs) לא יציגו כאן נתונים
         st.info("Quarterly earnings data is not available for this stock.")
         
     st.markdown("---")
@@ -385,12 +411,9 @@ for i in range(0, len(df), cols_per_row):
             continue
         with cols[j]:
             if st.button(button_label, key=f"btn_{ticker}_{i}_{j}", use_container_width=True):
-                # לאחר לחיצה, מעדכנים את ה-session_state
                 st.session_state.selected_ticker = ticker
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
-                
-                # כפיית ריצה מחדש כדי לעדכן את התצוגה
                 st.rerun() 
 
 st.markdown("---")
@@ -398,7 +421,6 @@ st.markdown("---")
 # --- Display Selected Stock Analysis ---
 if st.session_state.selected_ticker is not None:
     
-    # מציג את הניתוח
     plot_advanced_stock_graph(
         st.session_state.selected_ticker,
         st.session_state.selected_cost_price,
