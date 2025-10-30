@@ -13,6 +13,7 @@ st.set_page_config(
 st.title("My Stock Portfolio")
 st.markdown("---")
 
+# ודא שנתיב הקובץ הוא נכון
 file_path = "תיק מניות.xlsx"
 
 # --- Data Loading and Cleaning ---
@@ -53,7 +54,7 @@ with st.spinner("Loading portfolio stocks..."):
     df = load_portfolio()
     
     if df is None:
-        st.error("Could not find a header row containing 'Cumulative Change' in the Excel file.")
+        st.error("Could not find a header row containing 'שינוי מצטבר' (Cumulative Change) in the Excel file.")
         st.stop()
         
     df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
@@ -70,7 +71,11 @@ def format_large_number(num):
     """ממיר מספרים גדולים לפורמט קריא (כגון 1.5T, 500B, 1.2M)"""
     if pd.isna(num) or num is None:
         return "N/A"
-    num = float(num)
+    try:
+        num = float(num)
+    except ValueError:
+        return "N/A"
+        
     if abs(num) >= 1e12:
         return f'{num / 1e12:.2f}T'
     elif abs(num) >= 1e9:
@@ -82,7 +87,7 @@ def format_large_number(num):
     else:
         return f'{num:.2f}'
 
-# --- Data Fetching Function ---
+# --- Data Fetching Function (Updated) ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     # אם period=1w הורד חודש נתונים כדי לוודא שיש מספיק נקודות
@@ -96,8 +101,14 @@ def get_stock_data(ticker, period="1y"):
         # משיכת נתונים פונדמנטליים
         info = stock.info
         
+        # 🌟 חדש: משיכת המלצות אנליסטים
+        recommendations = stock.get_recommendations_summary() 
+        
+        # 🌟 חדש: משיכת רווחים רבעוניים
+        quarterly_earnings = stock.quarterly_earnings
+        
         if data.empty:
-            return None, None, None
+            return None, None, None, None, None
         
         # חתוך ל-7 הימים האחרונים אם period=1w
         if period == "1w":
@@ -108,11 +119,13 @@ def get_stock_data(ticker, period="1y"):
         except:
             current_price = data["Close"].iloc[-1]
 
-        return data, current_price, info
+        # החזרת חמישה ערכים
+        return data, current_price, info, recommendations, quarterly_earnings
     except Exception as e:
-        return None, None, None
+        # st.error(f"Error fetching data for {ticker}: {e}") # ניתן להשתמש לדיבוג
+        return None, None, None, None, None
         
-# --- Advanced Plotting Function ---
+# --- Advanced Plotting Function (Updated) ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
@@ -136,8 +149,8 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             }[x]
         )
 
-    # Load Data 
-    data, current_price, info = get_stock_data(ticker, period)
+    # Load Data (Updated to retrieve 5 values)
+    data, current_price, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
     
     if data is None or data.empty:
         st.error(f"No historical data found for {ticker}")
@@ -160,7 +173,12 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Cost Price", f"${cost_price:.2f}")
     col2.metric("Current Price", f"${current_price:.2f}", delta=change_abs_rounded)
-    col3.metric("Cumulative Change", f"{change_pct:.2f}%", delta=change_abs_rounded)
+    # שימוש בפורמט מותאם אישית עבור הדלתא כדי להציג את האחוז
+    if change_pct >= 0:
+        delta_label = f"+{change_pct:.2f}%"
+    else:
+        delta_label = f"{change_pct:.2f}%"
+    col3.metric("Cumulative Change", f"{change_pct:.2f}%", delta=change_abs_rounded, delta_color="normal")
     
     # Data Period Metric
     time_delta = data.index[-1] - data.index[0]
@@ -228,7 +246,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.markdown("---") # מפריד אחרי הגרף
     
     # --- Key Fundamental Data ---
-    st.markdown("### Key Fundamental Data")
+    st.markdown("### 🔑 Key Fundamental Data")
     if info is not None:
         market_cap = info.get('marketCap', None)
         pe_ratio = info.get('trailingPE', None)
@@ -262,13 +280,66 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         
     st.markdown("---")
     
-    # Statistics
-    st.markdown("### Price Statistics")
+    # --- 📊 Analyst Recommendations (NEW SECTION) ---
+    st.markdown("### 📊 Analyst Recommendations")
+    if recommendations is not None and not recommendations.empty:
+        
+        # get_recommendations_summary מחזירה טבלה מצטברת - נשתמש בשורה האחרונה לסיכום העדכני
+        latest_recommendations = recommendations.iloc[-1]
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        # Strong Buy & Buy (Green/Good)
+        col1.metric("Strong Buy", f"{latest_recommendations.get('strongBuy', 0):.0f}", delta_color="normal")
+        col2.metric("Buy", f"{latest_recommendations.get('buy', 0):.0f}", delta_color="normal")
+        # Hold (Gray/Neutral)
+        col3.metric("Hold", f"{latest_recommendations.get('hold', 0):.0f}", delta_color="off") 
+        # Sell & Strong Sell (Red/Inverse)
+        col4.metric("Sell", f"{latest_recommendations.get('sell', 0):.0f}", delta_color="inverse")
+        col5.metric("Strong Sell", f"{latest_recommendations.get('strongSell', 0):.0f}", delta_color="inverse")
+
+        with st.expander("Recommendations Trend (Historical)"):
+            # מציג את הטבלה המקורית של מגמות ההמלצה לאורך זמן
+            st.dataframe(recommendations.T.style.format('{:.0f}'), use_container_width=True)
+    else:
+        st.info("Analyst recommendations are not available for this stock.")
+
+    st.markdown("---")
+
+    # --- 💰 Latest Quarterly Earnings Report (NEW SECTION) ---
+    st.markdown("### 💰 Latest Quarterly Earnings Report")
+    if quarterly_earnings is not None and not quarterly_earnings.empty:
+        
+        # בחר את הדוח הרבעוני האחרון (השורה האחרונה ב-DataFrame)
+        latest_report = quarterly_earnings.iloc[-1]
+        
+        # חלץ את הנתונים העיקריים
+        latest_date = latest_report.name 
+        revenue = latest_report.get('Revenue', None)
+        earnings = latest_report.get('Earnings', None)
+        
+        e_col1, e_col2, e_col3 = st.columns(3)
+        
+        e_col1.metric("**Report Date**", latest_date.strftime('%Y-%m-%d'))
+        e_col2.metric("**Revenue**", format_large_number(revenue))
+        e_col3.metric("**Earnings**", format_large_number(earnings))
+        
+        with st.expander("Quarterly Earnings History"):
+            # הצגת טבלת הנתונים המלאה של הדוחות הרבעוניים
+            st.dataframe(quarterly_earnings.T.style.format(formatter={'Revenue': format_large_number, 'Earnings': format_large_number}), use_container_width=True)
+            
+    else:
+        st.info("Quarterly earnings data is not available for this stock.")
+        
+    st.markdown("---")
+
+    # --- Price Statistics (Original Section) ---
+    st.markdown("### 📈 Price Statistics")
     col1, col2, col3, col4 = st.columns(4)
     col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
     col2.info(f"**Maximum Price:**\n${data['Close'].max():.2f}")
     col3.info(f"**Average Price:**\n${data['Close'].mean():.2f}")
-    col4.info(f"**Volatility (SD):\n${data['Close'].std():.2f}")
+    col4.info(f"**Volatility (SD):**\n${data['Close'].std():.2f}")
     
     # Recent Data
     with st.expander("Recent Data (Last 10 Trading Days)"):
@@ -296,17 +367,16 @@ for i in range(0, len(df), cols_per_row):
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
                 
-                # הגלילה האוטומטית בוטלה כאן
+                # כפיית ריצה מחדש כדי לעדכן את התצוגה
+                st.rerun() 
 
 st.markdown("---")
 
 # --- Display Selected Stock Analysis ---
 if st.session_state.selected_ticker is not None:
     
-    # 🌟 הפקודה החדשה לגלילה אוטומטית לנקודה זו:
+    # הפקודה לגלילה אוטומטית לנקודה זו
     st.markdown('<a id="analysis_anchor"></a>', unsafe_allow_html=True)
-    
-    # st.subheader(f"Detailed Analysis: {stock_name}")  <-- הכותרת מוצגת בפונקציה
     
     # מציג את הניתוח
     plot_advanced_stock_graph(
