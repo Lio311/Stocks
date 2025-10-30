@@ -43,7 +43,6 @@ def load_portfolio():
     df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.\-]', '', regex=True)
     df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
     df = df.dropna(subset=["מחיר עלות"])
-    # שינוי: מחיר עלות נשאר בשקלים, כפי שדרשת
     return df
 
 # --- Ticker Conversion for yfinance ---
@@ -52,11 +51,9 @@ def convert_ticker(t):
 
     # מיפוי מזהים מספריים
     if t_str == "1183441":
-        # Invesco S&P 500 UCITS ETF (LSE)
-        return "SPXP.L" 
+        return "SPXP.L" # Invesco S&P 500 UCITS ETF (LSE)
     elif t_str == "1159250":
-        # iShares $ CORE S&P 500 UCITS (LSE)
-        return "IUSA.L" 
+        return "IUSA.L" # iShares $ CORE S&P 500 UCITS (LSE)
     
     # טיפול בפורמטים קיימים
     elif t_str.startswith("XNAS:"):
@@ -104,19 +101,24 @@ def format_large_number(num):
     else:
         return f'{num:.2f}'
 
-# --- NEW: Forex Rate Fetching Function ---
-@st.cache_data(ttl=3600) # שמור שער חליפין למשך שעה
-def get_forex_rate(currency_pair="ILSUSD=X"):
-    """מושך את שער החליפין הנוכחי (שקל לדולר)"""
+# --- NEW: Forex Rate Fetching Function (FIXED) ---
+@st.cache_data(ttl=3600) 
+def get_forex_rate(currency_pair="ILS=X"):
+    """מושך את שער החליפין הנוכחי (דולר לשקל - USDILS)"""
     try:
+        # USDILS=X או ILS=X מחזיר את שער הדולר בשקלים (לדוגמה 3.7)
         forex = yf.Ticker(currency_pair)
-        # שער הסגירה האחרון
         rate = forex.history(period="1d")["Close"].iloc[-1]
+        
+        if rate < 1:
+            # אם קיבלנו שער הפוך (כגון 0.27 מ-ILSUSD=X), נהפוך אותו
+            st.warning(f"Forex rate {currency_pair} returned a rate < 1. Inverting rate to 1/rate for USD/ILS conversion.")
+            rate = 1 / rate
+            
         return rate
     except Exception:
-        # אם יש שגיאה, נשתמש בשער ידני
-        st.warning("Could not fetch ILSUSD exchange rate. Using default rate 0.27.")
-        return 0.27 
+        st.warning("Could not fetch USD/ILS exchange rate. Using default rate 3.7.")
+        return 3.7 # שער ידני מקורב
 
 # --- Data Fetching Function ---
 @st.cache_data(ttl=300)
@@ -152,9 +154,9 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.subheader(f"Detailed Analysis: {stock_name}")
     
     # --- Currency Setup ---
-    # משיכת שער חליפין: שקל (ILS) לדולר (USD)
-    ILS_TO_USD_RATE = get_forex_rate("ILSUSD=X")
-    st.caption(f"**שער חליפין (ILS -> USD):** ₪1 = ${ILS_TO_USD_RATE:.4f}")
+    # משיכת שער חליפין: דולר לשקל (USDILS)
+    USD_TO_ILS_RATE = get_forex_rate("ILS=X")
+    st.caption(f"**שער חליפין (USD -> ILS):** $1 = ₪{USD_TO_ILS_RATE:.4f}")
     
     
     # Period Selection
@@ -191,15 +193,18 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     # 📌 CONVERSION LOGIC (המרת כל הנתונים לדולר) 📌
     
     # 1. המרת מחיר עלות (שקלים -> דולר)
-    cost_price_usd = cost_price * ILS_TO_USD_RATE # מחיר עלות מגיע כבר בשקלים
+    # מחיר עלות בטבלה (ILS) / שער חליפין (ILS/USD)
+    cost_price_usd = cost_price / USD_TO_ILS_RATE 
     
     # 2. המרת מחיר נוכחי (אגורות -> שקלים -> דולר)
-    current_price_ils = current_price_raw / 100 # אגורות לשקלים
-    current_price_usd = current_price_ils * ILS_TO_USD_RATE
+    # נתון מ-yfinance (אגורות) / 100 (שקלים) / שער חליפין (דולרים)
+    current_price_usd = (current_price_raw / 100) / USD_TO_ILS_RATE
     
     # 3. המרת נתונים היסטוריים (אגורות -> שקלים -> דולר)
     data = data_raw.copy()
-    conversion_factor = ILS_TO_USD_RATE / 100
+    
+    # פקטור המרה: (1/100) * (1/USD_TO_ILS_RATE)
+    conversion_factor = 1 / (100 * USD_TO_ILS_RATE)
     
     # המרת כל עמודות המחיר
     for col in ['Open', 'High', 'Low', 'Close']:
@@ -318,7 +323,6 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         pb_ratio = info.get('priceToBook', None)
         dividend_yield = info.get('dividendYield', None)
         
-        # ... (שאר הנתונים הפונדמנטליים נשארים כפי שהם, ב-USD אם זמינים)
         pe_ratio_str = f"{pe_ratio:.2f}" if pe_ratio is not None and pd.notna(pe_ratio) else "N/A"
         forward_pe_str = f"{forward_pe:.2f}" if forward_pe is not None and pd.notna(forward_pe) else "N/A"
         pb_ratio_str = f"{pb_ratio:.2f}" if pb_ratio is not None and pd.notna(pb_ratio) else "N/A"
