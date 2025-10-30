@@ -2,49 +2,59 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="תיק מניות", layout="wide")
 
-# קריאת הקובץ מקומית
+st.title("📊 תיק המניות שלי")
+
+# קריאת הקובץ המקומי
 file_path = "תיק מניות.xlsx"
 df = pd.read_excel(file_path)
 
-# בדיקה לעמודות הנדרשות
-required_cols = {"Symbol", "Buy Date", "Buy Price"}
+# בדיקה לעמודות נדרשות
+required_cols = {"טיקר", "מחיר עלות", "מחיר זמן אמת"}
 if not required_cols.issubset(df.columns):
-    st.error("יש לוודא שלקובץ יש עמודות: Symbol, Buy Date, Buy Price")
+    st.error("יש לוודא שלקובץ יש עמודות: טיקר, מחיר עלות, מחיר זמן אמת")
     st.stop()
 
-st.title("📊 תיק המניות שלי")
+# הצגת טבלה מצומצמת
+st.dataframe(df[["טיקר", "מחיר עלות", "מחיר זמן אמת"]])
 
-# יצירת כפתור לכל מניה
+# טווח זמן לברירת מחדל (שנה אחורה)
+start_date = datetime.now() - timedelta(days=365)
+
+# הצגת כפתור לכל מניה
 for _, row in df.iterrows():
-    symbol = row["Symbol"]
-    buy_date = pd.to_datetime(row["Buy Date"])
-    buy_price = float(row["Buy Price"])
+    ticker = str(row["טיקר"]).strip()
+    cost_price = float(row["מחיר עלות"])
+    current_price = float(row["מחיר זמן אמת"])
 
-    if st.button(symbol):
-        st.subheader(f"{symbol} - גרף מהמועד {buy_date.date()} ועד היום")
+    if st.button(ticker):
+        st.subheader(f"{ticker} - גרף מהשנה האחרונה")
 
-        # הורדת הנתונים
-        data = yf.download(symbol, start=buy_date, progress=False)
+        # הורדת נתוני שערים
+        data = yf.download(ticker, start=start_date, progress=False)
         data.reset_index(inplace=True)
 
         if data.empty:
-            st.warning(f"לא נמצאו נתונים עבור {symbol}")
+            st.warning(f"לא נמצאו נתונים עבור {ticker}")
             continue
 
         # יצירת גרף
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=data["Date"], y=data["Close"], mode='lines', name='שער סגירה'))
-        fig.add_hline(y=buy_price, line=dict(color='red', dash='dash'), name='שער קנייה')
+        fig.add_hline(y=cost_price, line=dict(color='red', dash='dash'), name='מחיר עלות')
         fig.update_layout(
-            title=f"{symbol}: שינוי משער הקנייה עד היום",
+            title=f"{ticker} - מחיר עלות: {cost_price} | מחיר נוכחי: {current_price}",
             xaxis_title="תאריך",
             yaxis_title="שער",
             template="plotly_white",
             height=600
         )
+
+        # הצגת נתונים מספריים
+        change_pct = ((current_price - cost_price) / cost_price) * 100
+        st.write(f"**שינוי מצטבר:** {change_pct:.2f}%")
 
         st.plotly_chart(fig, use_container_width=True)
