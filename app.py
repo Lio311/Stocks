@@ -21,6 +21,7 @@ def load_portfolio():
     df_raw = pd.read_excel(file_path, header=None)
     header_row_idx = None
     for i, row in df_raw.iterrows():
+        # Searching for 'שינוי מצטבר' (Cumulative Change) to find the header row
         if row.astype(str).str.strip().str.contains("שינוי מצטבר", regex=False).any():
             header_row_idx = i
             break
@@ -29,7 +30,9 @@ def load_portfolio():
 
     df = pd.read_excel(file_path, header=header_row_idx)
     df.columns = [str(col).strip() for col in df.columns]
+    # Dropping rows where Ticker (טיקר) or Cost Price (מחיר עלות) are missing
     df = df.dropna(subset=["טיקר", "מחיר עלות"])
+    # Cleaning and converting 'Cost Price' to numeric
     df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
     df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
     df = df.dropna(subset=["מחיר עלות"])
@@ -62,20 +65,40 @@ if "selected_ticker" not in st.session_state:
     st.session_state.selected_cost_price = None
     st.session_state.selected_name = None
 
-# --- Data Fetching Function ---
+# --- Helper Function for Formatting Large Numbers ---
+def format_large_number(num):
+    if pd.isna(num):
+        return "N/A"
+    num = float(num)
+    if abs(num) >= 1e12:
+        return f'{num / 1e12:.2f}T'
+    elif abs(num) >= 1e9:
+        return f'{num / 1e9:.2f}B'
+    elif abs(num) >= 1e6:
+        return f'{num / 1e6:.2f}M'
+    elif abs(num) >= 1e3:
+        return f'{num / 1e3:.2f}K'
+    else:
+        return f'{num:.2f}'
+
+# --- Data Fetching Function (MODIFIED) ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
-    # אם period=1w הורד חודש נתונים כדי לוודא שיש מספיק נקודות
+    # If period=1w, download 1 month of data to ensure enough points
     yf_period = '1mo' if period == '1w' else ('max' if period == 'all' else period)
     
     try:
         stock = yf.Ticker(ticker)
+        # Fetching historical data
         data = stock.history(period=yf_period)
         
+        # Fetching fundamental info (This is the ADDITION)
+        info = stock.info
+        
         if data.empty:
-            return None, None
-
-        # חתוך ל-7 הימים האחרונים אם period=1w
+            return None, None, None # Added 'info' to the return
+        
+        # Cutting to the last 7 days if period=1w
         if period == "1w":
             data = data[data.index >= (data.index[-1] - pd.Timedelta(days=7))]
 
@@ -84,11 +107,12 @@ def get_stock_data(ticker, period="1y"):
         except:
             current_price = data["Close"].iloc[-1]
 
-        return data, current_price
+        return data, current_price, info # Returning historical data, current price, and fundamental info
     except Exception as e:
-        return None, None
+        # st.error(f"Error fetching data for {ticker}: {e}") # Debugging line
+        return None, None, None
 
-# --- Advanced Plotting Function ---
+# --- Advanced Plotting Function (MODIFIED) ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.subheader(f"Detailed Analysis: {stock_name}")
     
@@ -111,27 +135,32 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             }[x]
         )
 
-    # Load Data
-    data, current_price = get_stock_data(ticker, period)
+    # Load Data (MODIFIED to receive 'info')
+    data, current_price, info = get_stock_data(ticker, period)
     
     if data is None or data.empty:
-        st.error(f"No data found for {ticker}")
+        st.error(f"No historical data found for {ticker}")
         return
         
     if current_price is None:
         st.warning("Could not retrieve current price, using last closing price.")
         current_price = data["Close"].iloc[-1]
         
+    if info is None:
+        st.warning("Could not retrieve fundamental information.")
+        
     # Calculate Changes
     change_abs = current_price - cost_price
     change_pct = (change_abs / cost_price) * 100
     change_abs_rounded = round(change_abs, 3)
     
-    # Metrics
+    # --- Price and Portfolio Metrics ---
+    st.markdown("### 📊 Portfolio Performance")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Cost Price", f"${cost_price:.2f}")
     col2.metric("Current Price", f"${current_price:.2f}", delta=change_abs_rounded)
-    col3.metric("Cumulative Change", f"{change_pct:.2f}%", delta=change_abs_rounded)
+    # Using the delta property for visual indication of the change
+    col3.metric("Cumulative Change", f"{change_pct:.2f}%", delta=change_abs_rounded) 
     
     # Data Period Metric
     time_delta = data.index[-1] - data.index[0]
@@ -147,8 +176,45 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.markdown("---")
     
-    # Plotly Graph
+    # --- Key Fundamental Data (NEW SECTION) ---
+    st.markdown("### 📈 Key Fundamental Data")
+    if info is not None:
+        market_cap = info.get('marketCap', None)
+        pe_ratio = info.get('trailingPE', None)
+        forward_pe = info.get('forwardPE', None)
+        pb_ratio = info.get('priceToBook', None)
+        dividend_yield = info.get('dividendYield', None)
+        
+        # Displaying the data using st.columns and custom formatting
+        f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns(5)
+        
+        f_col1.metric("Market Cap", format_large_number(market_cap) if market_cap else "N/A")
+        f_col2.metric("P/E Ratio (TTM)", f"{pe_ratio:.2f}" if pe_ratio else "N/A")
+        f_col3.metric("Forward P/E", f"{forward_pe:.2f}" if forward_pe else "N/A")
+        f_col4.metric("P/B Ratio", f"{pb_ratio:.2f}" if pb_ratio else "N/A")
+        f_col5.metric("Div. Yield", f"{dividend_yield*100:.2f}%" if dividend_yield else "N/A")
+        
+        # More data in a second row
+        f2_col1, f2_col2, f2_col3, f2_col4 = st.columns(4)
+        
+        f2_col1.metric("52 Week High", f"${info.get('fiftyTwoWeekHigh', 'N/A'):.2f}")
+        f2_col2.metric("52 Week Low", f"${info.get('fiftyTwoWeekLow', 'N/A'):.2f}")
+        f2_col3.metric("Avg. Volume", format_large_number(info.get('averageVolume10days', None)))
+        f2_col4.metric("Beta", f"{info.get('beta', 'N/A'):.2f}")
+
+        # Adding a description
+        with st.expander("Company Description"):
+            st.markdown(info.get('longBusinessSummary', 'No description available.'))
+            
+    else:
+        st.info("Fundamental data is not available for this stock.")
+        
+    st.markdown("---")
+    
+    # --- Plotly Graph (Original Plotting Logic) ---
+    st.markdown("### 📊 Price Chart")
     fig = go.Figure()
+    # Color based on cumulative change
     color = '#34A853' if change_pct >= 0 else '#EA4335'
     
     # Closing Price
@@ -196,7 +262,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.plotly_chart(fig, use_container_width=True)
     
     # Statistics
-    st.markdown("### Statistics")
+    st.markdown("### 🧮 Price Statistics")
     col1, col2, col3, col4 = st.columns(4)
     col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
     col2.info(f"**Maximum Price:**\n${data['Close'].max():.2f}")
