@@ -68,37 +68,37 @@ if "selected_ticker" not in st.session_state:
 
 # פונקציה להצגת גרף משופר
 def plot_stock_graph(ticker, cost_price):
-    """מציג גרף מניה עם קו מחיר עלות וצביעה לפי רווח/הפסד, החל מהתאריך הקרוב ביותר למחיר העלות."""
+    """מציג גרף מניה עם קו מחיר עלות וצביעה לפי רווח/הפסד, עם דגש על מראה נקי (כמו בתמונה)."""
     
-    # הורדת נתונים לטווח מקסימלי כדי לכסות את כל האפשרויות
-    data = yf.download(ticker, period="max", progress=False) 
+    # הורדת נתונים לטווח של 5 שנים אחרונות כברירת מחדל
+    # בחרתי ב-5 שנים כדי לאפשר איתור מחיר קנייה ישן, אך נציג רק את החודש האחרון.
+    data = yf.download(ticker, period="5y", progress=False) 
     
     if data.empty:
         st.warning(f"לא נמצאו נתונים היסטוריים עבור הטיקר: {ticker}. נסה לוודא את נכונות הטיקר.")
         return
 
-    # 1. מציאת תאריך ההתחלה הרלוונטי (התאריך המוקדם ביותר שבו המחיר היה <= מחיר העלות)
+    # מציאת תאריך ההתחלה הרלוונטי לצורך חישובים
     dates_at_or_below_cost = data[data["Close"] <= cost_price].index
     
+    # 1. מציאת תאריך ההתחלה הרלוונטי (התאריך המוקדם ביותר שבו המחיר היה <= מחיר העלות)
     entry_date_found = not dates_at_or_below_cost.empty
     
     if entry_date_found:
         # התאריך המוקדם ביותר שהמניה נסגרה בו במחיר הקנייה או נמוך ממנו
-        relevant_start_date = dates_at_or_below_cost[0]
+        calculation_start_date = dates_at_or_below_cost[0]
     else:
-        # אם המחיר תמיד היה גבוה יותר (בכל ההיסטוריה), נציג את ה-5 השנים האחרונות כברירת מחדל
-        st.info("שימו לב: המחיר הנוכחי תמיד היה מעל מחיר העלות (בכל ההיסטוריה הזמינה). מציג את הגרף ל-5 שנים אחרונות.")
-        relevant_start_date = datetime.now() - timedelta(days=5*365)
+        # אם המחיר תמיד היה גבוה יותר, נשתמש ב-5 שנים לצורך החישוב
+        calculation_start_date = datetime.now() - timedelta(days=5*365)
         
-    # סינון הנתונים שיוצגו בגרף
-    data_to_plot = data[data.index >= relevant_start_date].copy()
+    # סינון הנתונים לצורך הצגה: נציג רק את החודש האחרון כדי לדמות "זום"
+    display_start_date = datetime.now() - timedelta(days=30)
+    data_to_plot = data[data.index >= display_start_date].copy()
     
     # *** בדיקה קפדנית יותר לאחר הסינון ***
     if data_to_plot.empty:
-        st.error(f"לא נמצאו נתונים היסטוריים להצגה עבור הטיקר {ticker} בטווח הרלוונטי. בדוק את הטיקר או את מחיר העלות.")
-        # במקרה של נתונים ריקים, אין מה להציג
+        st.error(f"לא נמצאו נתונים היסטוריים להצגה עבור הטיקר {ticker} בחודש האחרון. ייתכן ואין מסחר.")
         return
-
 
     # מחיר נוכחי בזמן אמת (ניסיון ראשון)
     try:
@@ -107,18 +107,29 @@ def plot_stock_graph(ticker, cost_price):
         # אם אין מידע "מהיר", השתמש בשער הסגירה האחרון מתוך הנתונים שהורדו
         current_price = data_to_plot["Close"].iloc[-1] 
     
+    # חישוב נתוני רווח/הפסד (באמצעות כלל הנתונים שנמצאו)
+    data_for_calc = data[data.index >= calculation_start_date].copy()
+    
+    # מחיר כניסה משוער, לצורך חישובים:
+    # נניח שזה מחיר העלות אם נמצא תאריך, או מחיר הסגירה ביום תחילת החישוב אם לא
+    if entry_date_found:
+        # אם מצאנו תאריך רלוונטי, נשתמש במחיר העלות שנתן המשתמש
+        entry_price = cost_price
+    else:
+        # אם לא מצאנו, נשתמש במחיר העלות שהוזן, אך נציין שהרווח הוא מהתחלה
+        entry_price = cost_price
+
     # חישוב שינוי מצטבר
-    change_pct = ((current_price - cost_price) / cost_price) * 100
+    change_pct = ((current_price - entry_price) / entry_price) * 100
     
     # קביעת צבע קו המניה בהתאם לרווח/הפסד
-    # צבע קו: ירוק/אדום כהה
+    # צבע קו ומילוי: ירוק כהה / אדום כהה
     line_color = '#047857' if current_price >= cost_price else '#B91C1C' 
-    # צבע מילוי: ירוק/אדום בהיר ושקוף (RGBA)
-    fill_color = 'rgba(16, 185, 129, 0.3)' if current_price >= cost_price else 'rgba(239, 68, 68, 0.3)'
+    fill_color = 'rgba(16, 185, 129, 0.4)' if current_price >= cost_price else 'rgba(239, 68, 68, 0.4)'
 
     fig = go.Figure()
     
-    # הוספת קו שער הסגירה (כעת גרף שטח)
+    # הוספת קו שער הסגירה (גרף שטח נקי)
     fig.add_trace(go.Scatter(
         x=data_to_plot.index, 
         y=data_to_plot["Close"], 
@@ -129,78 +140,42 @@ def plot_stock_graph(ticker, cost_price):
         fillcolor=fill_color # צבע המילוי
     ))
 
-    # --- הוספת סמן לנקודת הכניסה המשוערת (המחיר והתאריך בו המחיר היה ≤ מחיר העלות) ---
-    if entry_date_found:
-        fig.add_trace(go.Scatter(
-            x=[relevant_start_date], 
-            y=[cost_price], 
-            mode='markers', 
-            name='נקודת קנייה משוערת',
-            marker=dict(size=16, color='Blue', symbol='star', line=dict(width=2, color='White'))
-        ))
-    
-    # --- הוספת סמן למחיר הנוכחי (הנקודה האחרונה על הקו) ---
-    fig.add_trace(go.Scatter(
-        x=[data_to_plot.index[-1]], 
-        y=[current_price], 
-        mode='markers', 
-        name='מחיר נוכחי',
-        # צבע הסמן יהיה זהה לצבע הקו (ירוק/אדום)
-        marker=dict(size=14, color=line_color, symbol='circle', line=dict(width=2, color='white')) 
-    ))
-    
-    # הוספת קו מחיר העלות (בולט יותר)
-    fig.add_hline(
-        y=cost_price, 
-        line=dict(color='orange', dash='dot', width=2), 
-        name='מחיר עלות'
-    )
-    
-    # הוספת הערה (Annotation) למחיר העלות על הגרף
-    fig.add_annotation(
-        x=data_to_plot.index[-1], # תאריך אחרון בנתונים
-        y=cost_price, 
-        text=f"מחיר עלות: {cost_price:.2f}",
-        showarrow=False,
-        xshift=50, # הזזה קלה ימינה
-        font=dict(size=14, color="orange"),
-        bgcolor="rgba(255, 255, 255, 0.9)",
-        bordercolor="orange",
-        borderpad=4
-    )
+    # *** שינוי: הסרת קו מחיר עלות וסמנים מהגרף כדי לדמות מראה נקי יותר ***
+    # הנתונים הללו עדיין מוצגים ב-Metrics.
 
     # עדכון פריסת הגרף
     st.markdown(f"### {ticker} - ניתוח ביצועים")
     
     # הצגת נתונים מרכזיים
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric(label="מחיר נוכחי", value=f"{current_price:.2f}")
     with col2:
         st.metric(
-            label="שינוי מצטבר", 
+            label="שינוי מצטבר (משער העלות)", 
             value=f"{change_pct:.2f}%", 
             delta=f"{current_price - cost_price:.2f}"
         )
+    with col3:
+         st.metric(label="מחיר עלות", value=f"{cost_price:.2f}")
     
     # הגדרת טווח Y דינמי עם מעט מרווח בטחון
     
-    # *** התיקון לטיפול ב-NaN ובסדרות חסרות נתונים בטווח Y ***
     close_prices = data_to_plot["Close"].dropna()
     
     if close_prices.empty:
-        # אם אין נתונים מספריים, נשתמש רק במחיר העלות לטווח ה-Y
-        min_y = cost_price * 0.98
-        max_y = cost_price * 1.02
+        # אם אין נתונים מספריים, נשתמש בטווח קטן סביב המחיר הנוכחי
+        min_y = current_price * 0.98
+        max_y = current_price * 1.02
     else:
-        # שימוש בטוח ב min/max
-        min_y = min(close_prices.min(), cost_price) * 0.98
-        max_y = max(close_prices.max(), cost_price) * 1.02
+        # שימוש בטוח ב min/max עבור הנתונים המוצגים
+        min_y = close_prices.min() * 0.99
+        max_y = close_prices.max() * 1.01
 
 
     fig.update_layout(
         title={
-            'text': f"תנודת המניה {ticker} (החל מהתאריך בו המחיר היה ≤ {cost_price:.2f})",
+            'text': f"תנודת המניה {ticker} (30 יום אחרונים)",
             'y':0.95,
             'x':0.5,
             'xanchor': 'center',
@@ -211,6 +186,9 @@ def plot_stock_graph(ticker, cost_price):
         template="plotly_white",
         height=600,
         margin=dict(l=20, r=20, t=50, b=20),
+        # הסרת קווי רשת אופקיים/אנכיים למראה נקי
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=False),
         # הגדרת טווח Y דינמי
         yaxis_range=[min_y, max_y], 
     )
@@ -219,11 +197,11 @@ def plot_stock_graph(ticker, cost_price):
 
 # פונקציה להצגת גרף רגיל של מניית גוגל (GOOG)
 def plot_standard_google_graph():
-    """מציג גרף סטנדרטי של GOOG לשנה האחרונה."""
+    """מציג גרף סטנדרטי של GOOG לחודש האחרון (כמו בתמונה)."""
     st.markdown("---")
-    st.markdown("### 📈 גרף ייחוס סטנדרטי: Alphabet (GOOG)")
+    st.markdown("### 📈 גרף ייחוס סטנדרטי: Alphabet (GOOG) - 30 יום אחרונים")
     
-    start_date = datetime.now() - timedelta(days=365)
+    start_date = datetime.now() - timedelta(days=30) # טווח של 30 יום
     data = yf.download("GOOG", start=start_date, progress=False)
     
     if data.empty:
@@ -232,7 +210,7 @@ def plot_standard_google_graph():
 
     # צבע ירוק-כחול סטנדרטי לגרף הייחוס
     line_color = '#4285F4' 
-    fill_color = 'rgba(66, 133, 244, 0.3)' # כחול גוגל שקוף
+    fill_color = 'rgba(66, 133, 244, 0.4)' # כחול גוגל שקוף
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -246,12 +224,14 @@ def plot_standard_google_graph():
     ))
 
     fig.update_layout(
-        title='GOOG - שער סגירה לשנה האחרונה',
+        title='GOOG - שער סגירה לחודש האחרון',
         xaxis_title="תאריך",
         yaxis_title="שער",
         template="plotly_white",
         height=400,
         margin=dict(l=20, r=20, t=50, b=20),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=False),
     )
     st.plotly_chart(fig, use_container_width=True)
 
