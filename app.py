@@ -111,17 +111,22 @@ def plot_stock_graph(ticker, cost_price):
     change_pct = ((current_price - cost_price) / cost_price) * 100
     
     # קביעת צבע קו המניה בהתאם לרווח/הפסד
-    line_color = '#10B981' if current_price >= cost_price else '#EF4444' # ירוק לרווח, אדום להפסד
+    # צבע קו: ירוק/אדום כהה
+    line_color = '#047857' if current_price >= cost_price else '#B91C1C' 
+    # צבע מילוי: ירוק/אדום בהיר ושקוף (RGBA)
+    fill_color = 'rgba(16, 185, 129, 0.3)' if current_price >= cost_price else 'rgba(239, 68, 68, 0.3)'
 
     fig = go.Figure()
     
-    # הוספת קו שער הסגירה (צבוע לפי סטטוס רווח/הפסד)
+    # הוספת קו שער הסגירה (כעת גרף שטח)
     fig.add_trace(go.Scatter(
         x=data_to_plot.index, 
         y=data_to_plot["Close"], 
         mode='lines', 
         name='שער סגירה',
-        line=dict(color=line_color, width=3)
+        line=dict(color=line_color, width=3),
+        fill='tozeroy', # מילוי עד ציר ה-Y=0
+        fillcolor=fill_color # צבע המילוי
     ))
 
     # --- הוספת סמן לנקודת הכניסה המשוערת (המחיר והתאריך בו המחיר היה ≤ מחיר העלות) ---
@@ -225,13 +230,19 @@ def plot_standard_google_graph():
         st.warning("לא ניתן לטעון נתונים עבור GOOG.")
         return
 
+    # צבע ירוק-כחול סטנדרטי לגרף הייחוס
+    line_color = '#4285F4' 
+    fill_color = 'rgba(66, 133, 244, 0.3)' # כחול גוגל שקוף
+
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=data.index, 
         y=data["Close"], 
         mode='lines', 
         name='שער סגירה',
-        line=dict(color='#4285F4', width=3) # כחול גוגל
+        line=dict(color=line_color, width=3), 
+        fill='tozeroy', # מילוי עד ציר ה-Y=0
+        fillcolor=fill_color # צבע המילוי
     ))
 
     fig.update_layout(
