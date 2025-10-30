@@ -246,12 +246,11 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         f_col5.metric("**Div. Yield**", f"{dividend_yield*100:.2f}%" if dividend_yield else "N/A")
         
         # נתונים נוספים בשורה שנייה
-        f2_col1, f2_col2, f2_col3, f2_col4 = st.columns(4)
+        f2_col1, f2_col2, f2_col3 = st.columns(3)
         
         f2_col1.metric("**52 Week High**", f"${info.get('fiftyTwoWeekHigh', 'N/A'):.2f}")
         f2_col2.metric("**52 Week Low**", f"${info.get('fiftyTwoWeekLow', 'N/A'):.2f}")
         f2_col3.metric("**Avg. Volume**", format_large_number(info.get('averageVolume10days', None)))
-        f2_col4.metric("**Beta**", f"{info.get('beta', 'N/A'):.2f}")
 
         # הוספת תיאור החברה
         with st.expander("Company Description"):
