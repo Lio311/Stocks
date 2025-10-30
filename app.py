@@ -14,18 +14,25 @@ st.title("My Stock Portfolio")
 st.markdown("---")
 
 # ודא שנתיב הקובץ הוא נכון
+# **שימו לב: ודאו שקובץ "תיק מניות.xlsx" נמצא באותה תיקייה כמו קובץ הפייתון.**
 file_path = "תיק מניות.xlsx"
 
 # --- Data Loading and Cleaning ---
 @st.cache_data
 def load_portfolio():
-    df_raw = pd.read_excel(file_path, header=None)
+    try:
+        df_raw = pd.read_excel(file_path, header=None)
+    except FileNotFoundError:
+        st.error(f"Error: The file '{file_path}' was not found. Please ensure the Excel file is in the correct directory.")
+        return None
+        
     header_row_idx = None
     for i, row in df_raw.iterrows():
         # מחפשים את 'שינוי מצטבר' כדי למצוא את שורת הכותרת
         if row.astype(str).str.strip().str.contains("שינוי מצטבר", regex=False).any():
             header_row_idx = i
             break
+            
     if header_row_idx is None:
         return None
 
@@ -34,7 +41,8 @@ def load_portfolio():
     # מסננים שורות ללא טיקר או מחיר עלות
     df = df.dropna(subset=["טיקר", "מחיר עלות"])
     # ניקוי והמרה של 'מחיר עלות' למספרי
-    df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
+    # שיפור הניקוי: מסיר רק תווי מטבע לא רצויים, במקרה שיש (כמו $ או ¥)
+    df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.\-]', '', regex=True)
     df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
     df = df.dropna(subset=["מחיר עלות"])
     return df
@@ -54,7 +62,7 @@ with st.spinner("Loading portfolio stocks..."):
     df = load_portfolio()
     
     if df is None:
-        st.error("Could not find a header row containing 'שינוי מצטבר' (Cumulative Change) in the Excel file.")
+        st.error("Could not find a header row containing 'שינוי מצטבר' (Cumulative Change) in the Excel file, or the file is missing.")
         st.stop()
         
     df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
@@ -109,13 +117,14 @@ def get_stock_data(ticker, period="1y"):
         
         if data.empty:
             return None, None, None, None, None
-        
+            
         # חתוך ל-7 הימים האחרונים אם period=1w
         if period == "1w":
             data = data[data.index >= (data.index[-1] - pd.Timedelta(days=7))]
 
         try:
-            current_price = stock.fast_info["last_price"]
+            # נסה להשתמש ב-fast_info, אם נכשל, השתמש במחיר הסגירה האחרון
+            current_price = stock.fast_info.get("last_price", data["Close"].iloc[-1])
         except:
             current_price = data["Close"].iloc[-1]
 
@@ -125,7 +134,7 @@ def get_stock_data(ticker, period="1y"):
         # st.error(f"Error fetching data for {ticker}: {e}") # ניתן להשתמש לדיבוג
         return None, None, None, None, None
         
-# --- Advanced Plotting Function (Modified) ---
+# --- Advanced Plotting Function (Modified & Fixed) ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
@@ -150,6 +159,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         )
 
     # Load Data (Updated to retrieve 5 values)
+    # 📌 כאן המשתנה quarterly_earnings מוגדר ונטען
     data, current_price, info, recommendations, quarterly_earnings = get_stock_data(ticker, period)
     
     if data is None or data.empty:
@@ -159,9 +169,6 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     if current_price is None:
         st.warning("Could not retrieve current price, using last closing price.")
         current_price = data["Close"].iloc[-1]
-        
-    if info is None:
-        st.warning("Could not retrieve fundamental information.")
         
     # Calculate Changes
     change_abs = current_price - cost_price
@@ -173,7 +180,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Cost Price", f"${cost_price:.2f}")
     col2.metric("Current Price", f"${current_price:.2f}", delta=change_abs_rounded)
-    # שימוש בפורמט מותאם אישית עבור הדלתא כדי להציג את האחוז
+    
     if change_pct >= 0:
         delta_label = f"+{change_pct:.2f}%"
     else:
@@ -243,9 +250,9 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.plotly_chart(fig, use_container_width=True)
     
-    st.markdown("---") # מפריד אחרי הגרף
+    st.markdown("---") 
     
-    # --- Price Statistics (MOVED TO HERE) ---
+    # --- Price Statistics ---
     st.markdown("### Price Statistics")
     col1, col2, col3, col4 = st.columns(4)
     col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
@@ -270,22 +277,32 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         pb_ratio = info.get('priceToBook', None)
         dividend_yield = info.get('dividendYield', None)
         
+        # טיפול ב-None/NaN לפני העיצוב
+        pe_ratio_str = f"{pe_ratio:.2f}" if pe_ratio is not None and pd.notna(pe_ratio) else "N/A"
+        forward_pe_str = f"{forward_pe:.2f}" if forward_pe is not None and pd.notna(forward_pe) else "N/A"
+        pb_ratio_str = f"{pb_ratio:.2f}" if pb_ratio is not None and pd.notna(pb_ratio) else "N/A"
+        div_yield_str = f"{dividend_yield * 100:.2f}%" if dividend_yield is not None and pd.notna(dividend_yield) else "N/A"
+        
         # מציגים את הנתונים העיקריים בשורה הראשונה
         f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         
         f_col1.metric("**Market Cap**", format_large_number(market_cap))
-        f_col2.metric("**P/E Ratio (TTM)**", f"{pe_ratio:.2f}" if pe_ratio else "N/A")
-        f_col3.metric("**Forward P/E**", f"{forward_pe:.2f}" if forward_pe else "N/A")
-        f_col4.metric("**P/B Ratio**", f"{pb_ratio:.2f}" if pb_ratio else "N/A")
+        f_col2.metric("**P/E Ratio (TTM)**", pe_ratio_str)
+        f_col3.metric("**Forward P/E**", forward_pe_str)
+        f_col4.metric("**P/B Ratio**", pb_ratio_str)
         
         
         # נתונים נוספים בשורה שנייה
         f2_col1, f2_col2, f2_col3, f2_col4 = st.columns(4)
         
-        f2_col1.metric("**52 Week High**", f"${info.get('fiftyTwoWeekHigh', 'N/A'):.2f}")
-        f2_col2.metric("**52 Week Low**", f"${info.get('fiftyTwoWeekLow', 'N/A'):.2f}")
+        # טיפול בנתוני 52 שבועות
+        high_52w = info.get('fiftyTwoWeekHigh', None)
+        low_52w = info.get('fiftyTwoWeekLow', None)
+        
+        f2_col1.metric("**52 Week High**", f"${high_52w:.2f}" if high_52w is not None and pd.notna(high_52w) else "N/A")
+        f2_col2.metric("**52 Week Low**", f"${low_52w:.2f}" if low_52w is not None and pd.notna(low_52w) else "N/A")
         f2_col3.metric("**Avg. Volume**", format_large_number(info.get('averageVolume10days', None)))
-        f2_col4.metric("**Div. Yield**", f"{dividend_yield*100:.2f}%" if dividend_yield else "N/A")
+        f2_col4.metric("**Div. Yield**", div_yield_str)
 
         # הוספת תיאור החברה
         with st.expander("Company Description"):
@@ -319,47 +336,43 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
 
     st.markdown("---")
 
-    # --- Latest Quarterly Earnings Report ---
-st.markdown("### Latest Quarterly Earnings Report")
+    # --- Latest Quarterly Earnings Report (FIXED) --- 📌
+    st.markdown("### Latest Quarterly Earnings Report")
 
-# ודא שיש נתונים ושה-DataFrame אינו ריק
-if quarterly_earnings is not None and not quarterly_earnings.empty:
-    
-    # בחר את הדוח הרבעוני האחרון (השורה האחרונה ב-DataFrame)
-    try:
-        latest_report = quarterly_earnings.iloc[-1]
-    except IndexError:
-        # זה לא אמור לקרות אם עבר את הבדיקה של not quarterly_earnings.empty
-        st.info("Quarterly earnings data is not available (Index Error).")
-        st.markdown("---")
-        # Ensure we exit this block gracefully
-        quarterly_earnings = None 
-    
-    if quarterly_earnings is not None:
-        # חלץ את הנתונים העיקריים
-        # Name הוא האינדקס, שהוא התאריך
-        latest_date = latest_report.name 
-        revenue = latest_report.get('Revenue', None)
-        earnings = latest_report.get('Earnings', None)
+    # ודא שיש נתונים ושה-DataFrame אינו ריק
+    if quarterly_earnings is not None and not quarterly_earnings.empty:
         
-        e_col1, e_col2, e_col3 = st.columns(3)
-        
-        # הצגת המטריקות
-        e_col1.metric("**Report Date**", latest_date.strftime('%Y-%m-%d'))
-        e_col2.metric("**Revenue**", format_large_number(revenue))
-        e_col3.metric("**Earnings**", format_large_number(earnings))
-        
-        with st.expander("Quarterly Earnings History"):
-            # הצגת טבלת הנתונים המלאה של הדוחות הרבעוניים
-            # עיצוב ה-DataFrame כך שישתמש בפונקציית format_large_number 
-            st.dataframe(quarterly_earnings.T.style.format(
-                formatter={'Revenue': format_large_number, 'Earnings': format_large_number}
-            ), use_container_width=True)
+        try:
+            # בחר את הדוח הרבעוני האחרון (השורה האחרונה ב-DataFrame)
+            latest_report = quarterly_earnings.iloc[-1]
             
-else:
-    st.info("Quarterly earnings data is not available for this stock.")
-    
-st.markdown("---")
+            # חלץ את הנתונים העיקריים
+            latest_date = latest_report.name 
+            revenue = latest_report.get('Revenue', None)
+            earnings = latest_report.get('Earnings', None)
+            
+            e_col1, e_col2, e_col3 = st.columns(3)
+            
+            # הצגת המטריקות
+            e_col1.metric("**Report Date**", latest_date.strftime('%Y-%m-%d'))
+            e_col2.metric("**Revenue**", format_large_number(revenue))
+            e_col3.metric("**Earnings**", format_large_number(earnings))
+            
+            with st.expander("Quarterly Earnings History"):
+                # הצגת טבלת הנתונים המלאה של הדוחות הרבעוניים
+                # עיצוב ה-DataFrame כך שישתמש בפונקציית format_large_number 
+                st.dataframe(quarterly_earnings.T.style.format(
+                    formatter={'Revenue': format_large_number, 'Earnings': format_large_number}
+                ), use_container_width=True)
+                
+        except IndexError:
+             # טיפול למקרה נדיר של DF לא ריק אך בעיה בגישה לאינדקס (יותר ליתר ביטחון)
+             st.info("Quarterly earnings data could not be parsed.")
+        
+    else:
+        st.info("Quarterly earnings data is not available for this stock.")
+        
+    st.markdown("---")
     
 # --- Stock Selection Buttons ---
 st.subheader("Select a Stock for Analysis")
