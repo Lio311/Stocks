@@ -30,20 +30,17 @@ df = pd.read_excel(file_path, header=header_row_idx)
 df.columns = [str(col).strip() for col in df.columns]
 
 # הסרת שורות ריקות או לא רלוונטיות
-df = df.dropna(subset=["טיקר"])
+df = df.dropna(subset=["טיקר", "מחיר עלות"])
 
-# ניקוי מתקדם של עמודות מספריות
-for col in ["מחיר עלות", "מחיר זמן אמת"]:
-    df[col] = df[col].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
-    df[col] = pd.to_numeric(df[col], errors='coerce')
-
-# הסרת שורות עם ערכים לא חוקיים
-df = df.dropna(subset=["מחיר עלות", "מחיר זמן אמת", "טיקר"])
+# ניקוי עמודות מספריות
+df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
+df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
+df = df.dropna(subset=["מחיר עלות"])
 
 # בדיקה שהעמודות הנדרשות קיימות
-required_cols = {"טיקר", "מחיר עלות", "מחיר זמן אמת"}
+required_cols = {"טיקר", "מחיר עלות"}
 if not required_cols.issubset(df.columns):
-    st.error("יש לוודא שלקובץ יש עמודות: טיקר, מחיר עלות, מחיר זמן אמת")
+    st.error("יש לוודא שלקובץ יש עמודות: טיקר, מחיר עלות")
     st.stop()
 
 # שמירת מצב המניה שנבחרה
@@ -51,17 +48,18 @@ if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = None
 
 # פונקציה להצגת גרף עבור מניה מסוימת
-def plot_stock_graph(ticker, cost_price, current_price):
+def plot_stock_graph(ticker, cost_price):
     start_date = datetime.now() - timedelta(days=365)
+    # הורדת נתוני היסטוריה ושער נוכחי
     data = yf.download(ticker, start=start_date, progress=False)
-    data.reset_index(inplace=True)
-
     if data.empty:
         st.warning(f"לא נמצאו נתונים עבור {ticker}")
         return
 
+    current_price = yf.Ticker(ticker).fast_info["last_price"]
+
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=data["Date"], y=data["Close"], mode='lines', name='שער סגירה'))
+    fig.add_trace(go.Scatter(x=data.index, y=data["Close"], mode='lines', name='שער סגירה'))
     fig.add_hline(y=cost_price, line=dict(color='red', dash='dash'), name='מחיר עלות')
     fig.update_layout(
         title=f"{ticker} - מחיר עלות: {cost_price} | מחיר נוכחי: {current_price}",
@@ -83,17 +81,14 @@ for i in range(0, len(df), cols_per_row):
         row = df.iloc[i + j]
         ticker = str(row["טיקר"]).strip()
         cost_price = row["מחיר עלות"]
-        current_price = row["מחיר זמן אמת"]
 
         if col.button(ticker):
             st.session_state.selected_ticker = ticker
             st.session_state.selected_cost_price = cost_price
-            st.session_state.selected_current_price = current_price
 
 # הצגת הגרף של המניה שנבחרה (מתחת לכל הכפתורים)
 if st.session_state.selected_ticker:
     plot_stock_graph(
         st.session_state.selected_ticker,
-        st.session_state.selected_cost_price,
-        st.session_state.selected_current_price
+        st.session_state.selected_cost_price
     )
