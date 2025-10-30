@@ -64,12 +64,16 @@ if "selected_ticker" not in st.session_state:
     st.session_state.selected_name = None
 
 # --- Data Fetching Function ---
+# נשמור את הפונקציה הזו גלובלית כדי שנוכל לנקות אותה
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     yf_period = 'max' if period == 'all' else period
     try:
         stock = yf.Ticker(ticker)
+        # שינוי קטן: אם הנתונים ריקים, נחזיר None במקום DataFrame ריק
         data = stock.history(period=yf_period)
+        if data.empty:
+            return None, None
         
         try:
             current_price = stock.fast_info["last_price"]
@@ -87,6 +91,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     # Period Selection
     col1, col2 = st.columns([1, 4])
     with col1:
+        # **הערה: אם יש שגיאת מטמון, המשתמש יכול לבחור תקופה אחרת ואז לחזור ל-1w**
         period = st.selectbox(
             "Display Period:",
             ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
@@ -106,8 +111,15 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     # Load Data
     data, current_price = get_stock_data(ticker, period)
     
+    # **תנאי שגיאה משופר:** מציג כפתור לניקוי המטמון
     if data is None or data.empty:
         st.error(f"No data found for {ticker}")
+        
+        # כפתור לניקוי המטמון של פונקציית הנתונים
+        if st.button("Clear Data Cache and Retry", key="cache_clear_button"):
+            get_stock_data.clear()
+            st.rerun()
+            
         return
         
     if current_price is None:
@@ -118,7 +130,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     change_abs = current_price - cost_price
     change_pct = (change_abs / cost_price) * 100
     
-    # **הוספת עיגול עבור הצגה (change_abs_rounded)**
+    # Rounding for display
     change_abs_rounded = round(change_abs, 3) 
     
     # Metrics
@@ -130,13 +142,15 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         st.metric(
             "Current Price", 
             f"${current_price:.2f}",
-            delta=change_abs_rounded # שימוש בערך המעוגל
+            delta=change_abs_rounded 
         )
     with col3:
+        # **תיקון: הצגת השינוי באחוזים כערך הראשי של המטריקה**
+        # הערך של הדלתא נשאר בדולרים כדי להתאים לתמונה
         st.metric(
             "Cumulative Change",
             f"{change_pct:.2f}%",
-            delta=change_abs_rounded # שימוש בערך המעוגל
+            delta=change_abs_rounded 
         )
     with col4:
         # Display the actual range of data
@@ -254,9 +268,12 @@ for i in range(0, len(df), cols_per_row):
             
         with cols[j]:
             if st.button(button_label, key=f"btn_{ticker}_{i}_{j}", use_container_width=True):
+                # **הערה: ננקה את המטמון של נתוני המניות כאשר מניה חדשה נבחרת**
+                get_stock_data.clear() 
                 st.session_state.selected_ticker = ticker
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
+                # אין צורך ב-rerun, זה יתרחש אוטומטית כשהסשן משתנה
                 
 st.markdown("---")
 
