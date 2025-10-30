@@ -113,7 +113,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
                 "1y": "1 Year",
                 "2y": "2 Years",
                 "5y": "5 Years",
-                "all": "ALL History" # New option label
+                "all": "All" # New option label
             }[x]
         )
         
