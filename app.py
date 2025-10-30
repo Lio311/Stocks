@@ -14,7 +14,6 @@ st.title("My Stock Portfolio")
 st.markdown("---")
 
 # ודא שנתיב הקובץ הוא נכון
-# **ודאו שקובץ "תיק מניות.xlsx" נמצא באותה תיקייה כמו קובץ הפייתון.**
 file_path = "תיק מניות.xlsx"
 
 # --- Data Loading and Cleaning ---
@@ -46,15 +45,27 @@ def load_portfolio():
     df = df.dropna(subset=["מחיר עלות"])
     return df
 
-# --- Ticker Conversion for yfinance ---
+# --- Ticker Conversion for yfinance (FIXED) ---
 def convert_ticker(t):
-    t = str(t).strip()
-    if t.startswith("XNAS:"):
-        return t.split(":")[1]
-    elif t.startswith("XLON:"):
-        return t.split(":")[1] + ".L"
+    t_str = str(t).strip()
+
+    # 📌 מיפוי מזהים מספריים לטיקרים של yfinance
+    if t_str == "1183441":
+        # Invesco S&P 500 UCITS ETF (לונדון)
+        return "SPXP.L" 
+    elif t_str == "1159250":
+        # iShares $ CORE S&P 500 UCITS (לונדון)
+        return "IUSA.L" 
+    
+    # 📌 טיפול בפורמטים קיימים
+    elif t_str.startswith("XNAS:"):
+        return t_str.split(":")[1]
+    elif t_str.startswith("XLON:"):
+        # XLON:AAPL -> AAPL.L
+        return t_str.split(":")[1] + ".L"
     else:
-        return t
+        # טיקרים רגילים כמו AAPL, GOOGL
+        return t_str
 
 # --- Portfolio Load Execution ---
 with st.spinner("Loading portfolio stocks..."):
@@ -94,7 +105,7 @@ def format_large_number(num):
     else:
         return f'{num:.2f}'
 
-# --- Data Fetching Function (Clean) ---
+# --- Data Fetching Function ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     yf_period = '1mo' if period == '1w' else ('max' if period == 'all' else period)
@@ -121,7 +132,7 @@ def get_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None, None, None, None
         
-# --- Advanced Plotting Function (Clean) ---
+# --- Advanced Plotting Function ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
@@ -355,6 +366,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
              st.info("Quarterly earnings data could not be parsed.")
         
     else:
+        # סביר להניח שקרנות סל (ETFs) לא יציגו כאן נתונים
         st.info("Quarterly earnings data is not available for this stock.")
         
     st.markdown("---")
