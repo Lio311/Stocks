@@ -61,12 +61,12 @@ with st.spinner("Loading portfolio stocks..."):
     df = load_portfolio()
     
     if df is None:
-        st.error("❌ Could not find a header row containing 'Cumulative Change' in the Excel file.")
+        st.error("Could not find a header row containing 'Cumulative Change' in the Excel file.")
         st.stop()
         
     # Map 'Ticker' to a yfinance-compatible ticker
     df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker) # 'Ticker' column
-    st.success(f"✅ Loaded {len(df)} stocks from the portfolio.")
+    st.success(f" Loaded {len(df)} stocks from the portfolio.")
 
 # --- Session State Initialization ---
 if "selected_ticker" not in st.session_state:
@@ -95,7 +95,7 @@ def get_stock_data(ticker, period="1y"):
 
 # --- Advanced Plotting Function ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
-    st.subheader(f"📈 Detailed Analysis: {stock_name}")
+    st.subheader(f" Detailed Analysis: {stock_name}")
     
     # Period Selection
     col1, col2 = st.columns([1, 4])
@@ -121,11 +121,11 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     data, current_price = get_stock_data(ticker, period)
     
     if data is None or data.empty:
-        st.error(f"❌ No data found for {ticker}")
+        st.error(f" No data found for {ticker}")
         return
         
     if current_price is None:
-        st.warning("⚠️ Could not retrieve current price, using last closing price.")
+        st.warning("Could not retrieve current price, using last closing price.")
         current_price = data["Close"].iloc[-1]
         
     # Calculate Changes
@@ -216,7 +216,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.plotly_chart(fig, use_container_width=True)
     
     # Additional Statistics
-    st.markdown("### 📊 Statistics")
+    st.markdown("###  Statistics")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -239,7 +239,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         st.dataframe(recent_data, use_container_width=True)
 
 # --- Stock Selection Buttons ---
-st.subheader("🎯 Select a Stock for Analysis")
+st.subheader(" Select a Stock for Analysis")
 cols_per_row = 6
 
 # Loop to create buttons
@@ -275,14 +275,14 @@ if st.session_state.selected_ticker is not None:
     )
     
     # Button to clear selection
-    if st.button("🔙 Back to Stock List", key="back_button"):
+    if st.button(" Back to Stock List", key="back_button"):
         st.session_state.selected_ticker = None
         st.session_state.selected_cost_price = None
         st.session_state.selected_name = None
         st.rerun()
 else:
-    st.info("👆 Select a stock from the list above to see a detailed analysis.")
+    st.info(" Select a stock from the list above to see a detailed analysis.")
 
 # --- Footer ---
 st.markdown("---")
-st.caption(f"💡 Data updated from Yahoo Finance | Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.caption(f" Data updated from Yahoo Finance | Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
