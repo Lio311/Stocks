@@ -49,7 +49,7 @@ def load_portfolio():
 def convert_ticker(t):
     t_str = str(t).strip()
 
-    # מיפוי מזהים מספריים לטיקרים של yfinance (לצורך זיהוי ושימוש ב-yfinance)
+    # מיפוי מזהים מספריים לטיקרים של yfinance
     if t_str == "1183441":
         return "1183441"
     elif t_str == "1159250":
@@ -101,7 +101,7 @@ def format_large_number(num):
     else:
         return f'{num:.2f}'
 
-# --- NEW: Forex Rate Fetching Function ---
+# --- Forex Rate Fetching Function ---
 @st.cache_data(ttl=3600) 
 def get_forex_rate(currency_pair="ILS=X"):
     """מושך את שער החליפין הנוכחי (דולר לשקל - USDILS)"""
@@ -116,7 +116,7 @@ def get_forex_rate(currency_pair="ILS=X"):
     except Exception:
         return 3.7 # שער ידני מקורב
 
-# --- Data Fetching Function ---
+# --- Data Fetching Function (yf_ticker logic) ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     # המרה לטיקר ש-yfinance מכירה
@@ -152,12 +152,12 @@ def get_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None, None, None, None
         
-# --- Advanced Plotting Function (UPDATED for Cost Price Conversion ONLY) ---
+# --- Advanced Plotting Function (FINAL FIX: USD vs USD Calculation) ---
 def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
     
-    # 📌 הגדרת טיקרים שבהם מחיר העלות הוא בשקלים ILS (נקנו בישראל)
+    # 📌 הגדרת טיקרים שבהם מחיר העלות הוא בשקלים ILS
     ILS_COST_TICKERS = ["1159250", "1183441"]
     
     # --- Load Data (with default period) ---
@@ -196,7 +196,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
         current_price_raw = data_raw["Close"].iloc[-1]
 
     
-    # 📌 CONVERSION LOGIC (המרת מחיר עלות בלבד) 📌
+    # 📌 CONVERSION LOGIC: רק מחיר עלות מ-ILS ל-USD 📌
     
     if ticker in ILS_COST_TICKERS:
         # מחיר עלות בשקלים -> המרה לדולר
@@ -206,49 +206,38 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
         # 1. המרת מחיר עלות (שקלים -> דולר)
         cost_price_usd = cost_price_ils / USD_TO_ILS_RATE
         
-        # 2. המחירים מ-YFinance (current/historical) נשארים ללא שינוי (במטבע המקורי)
-        current_price_native = current_price_raw 
-        
-        cost_price_display = f"${cost_price_usd:.2f}"
-        
     else:
-        # מצב: מניה זרה/רגילה - אין צורך בהמרה
+        # מצב: מניה זרה/רגילה - אין צורך בהמרה למחיר עלות
         cost_price_usd = cost_price_ils # מחיר עלות גולמי
-        current_price_native = current_price_raw
-        
-        cost_price_display = f"{cost_price_ils:.2f}" # מציגים כדולר או מטבע זר גולמי
+    
+    # נתונים מ-YFinance (current/historical) נשארים ללא שינוי (Native Currency)
+    current_price_native = current_price_raw 
+    
+    # 📌 FIX: מניחים שגם מחיר זמן אמת מ-Yfinance הוא דולרי לצורך חישוב הרווח 📌
+    # כפי שציינת, המחיר החי הוא למעשה בדולר:
+    current_price_usd = current_price_native 
+
+    # 2. חישוב רווחים בדולר (USD) - כעת זה USD מול USD
+    change_abs = current_price_usd - cost_price_usd
+    change_pct = (change_abs / cost_price_usd) * 100
+    change_abs_rounded = round(change_abs, 3)
 
     
-    # --- הגדרת משתנים לחישובים ולתצוגה ---
-    # לצורך חישוב הרווחים (change), המחיר הנוכחי צריך להיות מומר לדולר אם מחיר העלות הוא בדולר.
-    # מכיוון שאין לנו שער המרה מדויק מ-GBP/EUR ל-USD, נשתמש בהנחה (לצורך חישוב רווח) ש-Yfinance החזירה USD (כפי שאתה ביקשת), 
-    # או נבצע את ההמרה רק עבור מחיר העלות (כפי שעשינו).
-
-    # לצורך הצגת הרווחים, אנחנו צריכים שהמחירים יהיו באותו מטבע.
-    # הנחה: נשאר עם שתי המטבעות, ונציג את הרווח באחוזים בלבד (כדי להימנע מחישוב מטבע צולב לא מדויק).
+    # --- הצגת המדדים ---
     
-    # חישוב רווחים באחוזים: 
-    # לצורך החישוב, נצטרך להשתמש ב-cost_price_usd ו-current_price_native. מכיוון שזה בלתי אפשרי,
-    # נשתמש ב-*מחיר העלות המקורי* וב-*מחיר הנוכחי המקורי* כדי לחשב אחוזים, ונניח שהרווח המצטבר שלך ב-Excel אינו מושפע מהשינוי בדולר.
-    
-    # שימוש בנתונים גולמיים לצורך חישוב אחוזים (כדי לבודד את השפעת המטבע)
-    change_abs_native = current_price_raw - cost_price_ils 
-    change_pct = (change_abs_native / cost_price_ils) * 100
-    change_abs_rounded = round(change_abs_native, 3)
-
-    # נחליף את המטריקות להצגה:
-    
-    # --- Price and Portfolio Metrics ---
     st.markdown("### Portfolio Performance (Cost Price in USD $)")
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Cost Price (USD)", f"${cost_price_usd:.2f}") # מחיר עלות תמיד בדולר
-    col2.metric("Current Price (Native)", f"{current_price_raw:.2f}", delta=change_abs_rounded)
+    # שימוש ב-cost_price_usd
+    col1.metric("Cost Price (USD)", f"${cost_price_usd:.2f}") 
+    # שימוש ב-current_price_native (שמוצג כאן כדולר) והדלתא הנכונה
+    col2.metric("Current Price (USD)", f"${current_price_native:.2f}", delta=change_abs_rounded)
     
     if change_pct >= 0:
         delta_label = f"+{change_pct:.2f}%"
     else:
         delta_label = f"{change_pct:.2f}%"
-    col3.metric("Cumulative Change (%)", delta_label, delta=None) # מציגים אחוזים בלבד, ללא דלתא מספרית
+    # הצגת הדלתא האמיתית בדולר ובאחוזים
+    col3.metric("Cumulative Change", f"{change_pct:.2f}%", delta=change_abs_rounded, delta_color="normal")
     
     # Data Period Metric
     time_delta = data_raw.index[-1] - data_raw.index[0]
@@ -264,24 +253,24 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     
     st.markdown("---")
     
-    # --- Plotly Graph (Native Currency) ---
-    st.markdown("### Price Chart (Native Currency)")
+    # --- Plotly Graph (Native Currency, now treated as USD) ---
+    st.markdown("### Price Chart (USD $)")
     fig = go.Figure()
     color = '#34A853' if change_pct >= 0 else '#EA4335'
     
-    # Closing Price (Uses data in native currency)
+    # Closing Price (Uses data in USD)
     fig.add_trace(go.Scatter(
         x=data_raw.index, 
         y=data_raw["Close"],
         mode='lines',
-        name='Closing Price (Native)',
+        name='Closing Price (USD)',
         line=dict(color=color, width=2),
         fill='tozeroy',
         fillcolor=f'rgba({int(color[1:3],16)}, {int(color[3:5],16)}, {int(color[5:7],16)}, 0.15)',
-        hovertemplate='<b>Date:</b> %{x}<br><b>Price:</b> %{y:.2f}<extra></extra>'
+        hovertemplate='<b>Date:</b> %{x}<br><b>Price:</b> $%{y:.2f}<extra></extra>'
     ))
     
-    # Cost Price Line (Converted to USD for comparison - רק לקו הייחוס)
+    # Cost Price Line (Converted to USD)
     fig.add_trace(go.Scatter(
         x=[data_raw.index[0], data_raw.index[-1]],
         y=[cost_price_usd, cost_price_usd], 
@@ -291,20 +280,20 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
         hovertemplate='<b>Cost Price:</b> $%{y:.2f}<extra></extra>'
     ))
     
-    # Current Price Marker (in Native Currency)
+    # Current Price Marker (in USD)
     fig.add_trace(go.Scatter(
         x=[data_raw.index[-1]],
-        y=[current_price_raw],
+        y=[current_price_native],
         mode='markers',
-        name='Current Price (Native)',
+        name='Current Price (USD)',
         marker=dict(size=12, color='orange', symbol='star'),
-        hovertemplate='<b>Current Price:</b> %{y:.2f}<extra></extra>'
+        hovertemplate='<b>Current Price:</b> $%{y:.2f}<extra></extra>'
     ))
     
     fig.update_layout(
-        title={'text': f"{ticker} - Performance Tracking (Cost Price converted to USD for reference)", 'x':0.5, 'xanchor':'center'},
+        title={'text': f"{ticker} - Performance Tracking (All values in USD)", 'x':0.5, 'xanchor':'center'},
         xaxis_title="Date",
-        yaxis_title="Price (Native Currency)",
+        yaxis_title="Price (USD $)",
         template="plotly_white",
         height=600,
         hovermode='x unified',
@@ -315,16 +304,16 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     
     st.markdown("---") 
     
-    # --- Price Statistics (in Native Currency) ---
-    st.markdown("### Price Statistics (Native Currency)")
+    # --- Price Statistics (in USD) ---
+    st.markdown("### Price Statistics (USD $)")
     col1, col2, col3, col4 = st.columns(4)
-    col1.info(f"**Minimum Price:**\n{data_raw['Close'].min():.2f}")
-    col2.info(f"**Maximum Price:**\n{data_raw['Close'].max():.2f}")
-    col3.info(f"**Average Price:**\n{data_raw['Close'].mean():.2f}")
-    col4.info(f"**Volatility (SD):**\n{data_raw['Close'].std():.2f}")
+    col1.info(f"**Minimum Price:**\n${data_raw['Close'].min():.2f}")
+    col2.info(f"**Maximum Price:**\n${data_raw['Close'].max():.2f}")
+    col3.info(f"**Average Price:**\n${data_raw['Close'].mean():.2f}")
+    col4.info(f"**Volatility (SD):**\n${data_raw['Close'].std():.2f}")
     
     # Recent Data
-    with st.expander("Recent Data (Last 10 Trading Days) - Native Currency"):
+    with st.expander("Recent Data (Last 10 Trading Days) - USD"):
         recent_data = data_raw[['Open','High','Low','Close','Volume']].tail(10).copy()
         recent_data = recent_data.round(2)
         st.dataframe(recent_data, use_container_width=True)
