@@ -168,7 +168,7 @@ def get_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None, None, None, None
         
-# --- Advanced Plotting Function ---
+# --- Advanced Plotting Function (FIXED: Added Total Metrics Row) ---
 def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
@@ -218,57 +218,90 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         # מחיר עלות בשקלים -> המרה לדולר
         USD_TO_ILS_RATE = get_forex_rate("ILS=X")
         st.caption(f"Status: Cost Price in ILS | Exchange Rate (USD → ILS): $1 = ₪{USD_TO_ILS_RATE:.4f}")
-        
-        # 1. המרת מחיר עלות (שקלים -> דולר)
         cost_price_usd = cost_price_ils / USD_TO_ILS_RATE
-        
-        # 2. המחירים מ-YFinance (current/historical) נשארים ללא שינוי (USD)
         current_price_usd = current_price_raw 
         
     else:
         # מצב: מניה זרה/רגילה - אין צורך בהמרה
-        cost_price_usd = cost_price_ils # מחיר עלות גולמי (נניח שהוא כבר ב-USD)
+        cost_price_usd = cost_price_ils # מחיר עלות גולמי
         current_price_usd = current_price_raw
     
-    # 📌 חישוב שווי כולל (Total Value Calculations) 📌
+    # 📌 חישובים לכלל המדדים 📌
     
-    # 1. חישובים בסיסיים (דולר)
+    # 1. חישובים בסיסיים (דולר) - למניה בודדת
     change_abs_per_share = current_price_usd - cost_price_usd
-    change_pct_per_share = (change_abs_per_share / cost_price_usd) * 100
+    change_pct_per_share = (change_abs_per_share / cost_price_usd) * 100 if cost_price_usd != 0 else 0
+    change_abs_per_share_rounded = round(change_abs_per_share, 2)
     
-    # 2. חישובים כוללים (דולר)
+    # 2. חישובים כוללים (דולר) - לכלל ההחזקה
     total_cost_usd = cost_price_usd * stock_quantity
     total_current_value_usd = current_price_usd * stock_quantity
     total_profit_loss_usd = change_abs_per_share * stock_quantity
     total_profit_loss_pct = (total_profit_loss_usd / total_cost_usd) * 100 if total_cost_usd != 0 else 0
-    
-    # עיגול לצורך תצוגה
-    total_profit_loss_usd_rounded = round(total_profit_loss_usd, 2)
-    total_profit_loss_pct_rounded = round(total_profit_loss_pct, 2)
 
     
-    # --- 📌 עדכון: שינוי הצגת מדדי רווח/הפסד 📌 ---
+    # --- 📌 הצגת המדדים (שתי שורות, פונט גדול לרווח/הפסד) 📌 ---
     
     st.markdown("### Portfolio Performance (USD $)")
-    col1, col2, col3, col4 = st.columns(4) 
     
-    # עמודה 1: עלות כוללת
-    col1.metric("Total Cost (USD)", f"${total_cost_usd:,.2f}") 
+    # --- שורה 1: מדדים למניה בודדת ---
+    col1, col2, col3, col4 = st.columns(4)
     
-    # עמודה 2: שווי נוכחי
-    col2.metric("Total Current Value (USD)", f"${total_current_value_usd:,.2f}")
+    col1.metric("Cost Price (Per Share)", f"${cost_price_usd:,.2f}") 
+    col2.metric("Current Price (Per Share)", f"${current_price_usd:,.2f}", delta=f"${change_abs_per_share_rounded:,.2f}")
 
-    # עמודה 3: רווח/הפסד כולל בדולר (עם צבע, הכותרת שחורה)
-    # הערך שמוצג בצבע יהיה ה-delta.
-    col3.metric(label="Total P/L (USD)", # הכותרת נשארת שחורה
-                value="", # הערך הראשי ריק
-                delta=f"${total_profit_loss_usd_rounded:,.2f}") # זהו הערך שיהיה צבעוני
+    if change_pct_per_share >= 0:
+        delta_label_pct = f"+{change_pct_per_share:.2f}%"
+    else:
+        delta_label_pct = f"{change_pct_per_share:.2f}%"
+    col3.metric("Change (%)", delta_label_pct, delta_color="normal")
 
-    # עמודה 4: רווח/הפסד כולל באחוזים (עם צבע, הכותרת שחורה)
-    # הערך שמוצג בצבע יהיה ה-delta.
-    col4.metric(label="Total P/L (%)", # הכותרת נשארת שחורה
-                value="", # הערך הראשי ריק
-                delta=f"{total_profit_loss_pct_rounded:,.2f}%") # זהו הערך שיהיה צבעוני
+    time_delta = data_raw.index[-1] - data_raw.index[0]
+    if time_delta.days > 365:
+        display_period = f"{time_delta.days // 365}Y"
+    elif time_delta.days > 30:
+        display_period = f"{time_delta.days // 30}M"
+    elif time_delta.days >= 7:
+        display_period = f"{time_delta.days // 7}W"
+    else:
+        display_period = f"{time_delta.days}D"
+    col4.metric("Data Period", display_period)
+
+    # --- שורה 2: מדדים לכלל ההחזקה (עם פונט גדול וצבעוני) ---
+    st.markdown("##### Total Position Value")
+    col5, col6, col7, col8 = st.columns(4)
+
+    # עלות כוללת
+    col5.metric("Total Cost (USD)", f"${total_cost_usd:,.2f}") 
+    
+    # שווי נוכחי
+    col6.metric("Total Current Value (USD)", f"${total_current_value_usd:,.2f}")
+
+    # --- מטריקה מותאמת אישית לרווח/הפסד בדולרים (פונט גדול וצבעוני) ---
+    p_l_color = "green" if total_profit_loss_usd >= 0 else "red"
+    p_l_sign = "+" if total_profit_loss_usd >= 0 else ""
+    
+    col7.markdown(f"""
+    <div style="padding: 0.5rem 0.25rem;">
+        <span style="font-size: 0.875rem; color: rgba(49, 51, 63, 0.6); line-height: 1.5;">Total P/L (USD)</span>
+        <div style="font-size: 1.75rem; color: {p_l_color}; line-height: 1.5; font-weight: 600;">
+            {p_l_sign}${total_profit_loss_usd:,.2f}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # --- מטריקה מותאמת אישית לרווח/הפסד באחוזים (פונט גדול וצבעוני) ---
+    pct_color = "green" if total_profit_loss_pct >= 0 else "red"
+    pct_sign = "+" if total_profit_loss_pct >= 0 else ""
+
+    col8.markdown(f"""
+    <div style="padding: 0.5rem 0.25rem;">
+        <span style="font-size: 0.875rem; color: rgba(49, 51, 63, 0.6); line-height: 1.5;">Total P/L (%)</span>
+        <div style="font-size: 1.75rem; color: {pct_color}; line-height: 1.5; font-weight: 600;">
+            {pct_sign}{total_profit_loss_pct:,.2f}%
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.markdown("---")
     
