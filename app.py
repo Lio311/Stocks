@@ -4,7 +4,7 @@ import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
-# --- App Configuration ---
+# --- 1. Page Configuration ---
 st.set_page_config(
     page_title="My Stock Portfolio",
     layout="wide"
@@ -13,21 +13,26 @@ st.set_page_config(
 st.title("My Stock Portfolio")
 st.markdown("---")
 
-# ודא שנתיב הקובץ הוא נכון
+# Define the path to the Excel file
 file_path = "תיק מניות.xlsx"
 
-# --- Data Loading and Cleaning ---
+# --- 2. Data Loading and Cleaning ---
 @st.cache_data
 def load_portfolio():
+    """
+    Loads and cleans the portfolio data from the Excel file.
+    Finds the header dynamically by searching for a keyword.
+    """
     try:
+        # Read the raw Excel file without a specific header
         df_raw = pd.read_excel(file_path, header=None)
     except FileNotFoundError:
         st.error(f"Error: The file '{file_path}' was not found. Please ensure the Excel file is in the correct directory.")
         return None
         
+    # Find the actual header row by searching for a specific keyword ('שינוי מצטבר')
     header_row_idx = None
     for i, row in df_raw.iterrows():
-        # מחפשים את 'שינוי מצטבר' כדי למצוא את שורת הכותרת
         if row.astype(str).str.strip().str.contains("שינוי מצטבר", regex=False).any():
             header_row_idx = i
             break
@@ -35,40 +40,43 @@ def load_portfolio():
     if header_row_idx is None:
         return None
 
+    # Re-read the Excel file using the correct header row
     df = pd.read_excel(file_path, header=header_row_idx)
+    # Clean column names (strip whitespace)
     df.columns = [str(col).strip() for col in df.columns]
     
-    # ודא שכל העמודות הנדרשות קיימות
+    # Ensure all necessary columns are present in the file
     required_cols = ["טיקר", "מחיר עלות", "כמות מניות"]
     if not all(col in df.columns for col in required_cols):
         st.error(f"Error: The Excel file must contain the columns: {', '.join(required_cols)}")
         return None
         
-    # מסננים שורות ללא טיקר, מחיר עלות או כמות
+    # Filter out rows that are missing essential data
     df = df.dropna(subset=required_cols)
     
-    # ניקוי והמרה של 'מחיר עלות' למספרי
+    # Clean and convert 'Cost Price' to a numeric type
     df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.\-]', '', regex=True)
     df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
     
-    # ניקוי והמרה של 'כמות מניות' למספרי
+    # Clean and convert 'Stock Quantity' to a numeric type
     df["כמות מניות"] = df["כמות מניות"].astype(str).str.replace(r'[^\d\.]', '', regex=True)
     df["כמות מניות"] = pd.to_numeric(df["כמות מניות"], errors='coerce')
 
     df = df.dropna(subset=required_cols)
     return df
 
-# --- Ticker Conversion for yfinance ---
+# --- 3. Ticker Conversion ---
 def convert_ticker(t):
+    """Converts ticker formats from the Excel file to yfinance-compatible tickers."""
     t_str = str(t).strip()
 
-    # מיפוי מזהים מספריים לטיקרים של yfinance
+    # Map specific numeric IDs (from Excel) to yfinance-compatible tickers
     if t_str == "1183441":
         return "1183441"
     elif t_str == "1159250":
         return "1159250" 
     
-    # טיפול בפורמטים קיימים
+    # Handle other known formats (e.g., XNAS:, XLON:)
     elif t_str.startswith("XNAS:"):
         return t_str.split(":")[1]
     elif t_str.startswith("XLON:"):
@@ -76,7 +84,7 @@ def convert_ticker(t):
     else:
         return t_str
 
-# --- Portfolio Load Execution ---
+# --- 4. Load Portfolio Data ---
 with st.spinner("Loading portfolio stocks..."):
     df = load_portfolio()
     
@@ -87,7 +95,8 @@ with st.spinner("Loading portfolio stocks..."):
     df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
     st.success(f"Loaded {len(df)} stocks from the portfolio.")
 
-# --- Session State Initialization ---
+# --- 5. Session State Initialization ---
+# Initialize session state variables to store the selected stock's details
 if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = None
 if "selected_cost_price" not in st.session_state:
@@ -97,11 +106,11 @@ if "selected_name" not in st.session_state:
 if "selected_quantity" not in st.session_state:
     st.session_state.selected_quantity = None 
 if "current_period" not in st.session_state:
-    st.session_state.current_period = '1y' # הגדרת תקופת ברירת מחדל
+    st.session_state.current_period = '1y' # Set default chart period
 
-# --- Helper Function for Formatting Large Numbers ---
+# --- 6. Helper Functions ---
 def format_large_number(num):
-    """ממיר מספרים גדולים לפורמט קריא (כגון 1.5T, 500B, 1.2M)"""
+    """Converts large numbers to a readable format (e.g., 1.5T, 500B, 1.2M)."""
     if pd.isna(num) or num is None:
         return "N/A"
     try:
@@ -118,27 +127,28 @@ def format_large_number(num):
     elif abs(num) >= 1e3:
         return f'{num / 1e3:.2f}K'
     else:
-        return f'{num:,.2f}' # פורמט כסף רגיל עם פסיקים
+        return f'{num:,.2f}'
 
-# --- Forex Rate Fetching Function ---
 @st.cache_data(ttl=3600) 
 def get_forex_rate(currency_pair="ILS=X"):
-    """מושך את שער החליפין הנוכחי (דולר לשקל - USDILS)"""
+    """Fetches the current USD to ILS exchange rate."""
     try:
         forex = yf.Ticker(currency_pair)
         rate = forex.history(period="1d")["Close"].iloc[-1]
         
+        # Ensure the rate is USD -> ILS (which should be > 1)
         if rate < 1:
             rate = 1 / rate
             
         return rate
     except Exception:
-        return 3.7 
+        return 3.7 # Fallback rate in case of API failure
 
-# --- Data Fetching Function ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
-    # המרה לטיקר ש-yfinance מכירה
+    """Fetches historical data, info, and recommendations from yfinance."""
+    
+    # Manually map local tickers to their yfinance equivalents
     if ticker == "1183441":
         yf_ticker = "SPXS.L" # Invesco S&P 500 UCITS ETF
     elif ticker == "1159250":
@@ -146,10 +156,12 @@ def get_stock_data(ticker, period="1y"):
     else:
         yf_ticker = ticker
         
+    # Adjust period syntax for yfinance (e.g., '1w' -> '1mo')
     yf_period = '1mo' if period == '1w' else ('max' if period == 'all' else period)
     
     try:
         stock = yf.Ticker(yf_ticker)
+        # Fetch historical data, info, and recommendations
         data = stock.history(period=yf_period)
         info = stock.info
         recommendations = stock.get_recommendations_summary() 
@@ -158,9 +170,11 @@ def get_stock_data(ticker, period="1y"):
         if data.empty:
             return None, None, None, None, None
             
+        # yfinance '1w' fix: fetch '1mo' and manually slice the last 7 days
         if period == "1w":
             data = data[data.index >= (data.index[-1] - pd.Timedelta(days=7))]
 
+        # Try to get the fast_info price, fall back to the last close price
         try:
             current_price = stock.fast_info.get("last_price", data["Close"].iloc[-1])
         except:
@@ -170,20 +184,20 @@ def get_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None, None, None, None
         
-# --- Advanced Plotting Function (FIXED: Dropdown position and Metric layout) ---
+# --- 7. Main Analysis and Plotting Function ---
 def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
     
-    # 📌 הגדרת טיקרים שבהם מחיר העלות הוא בשקלים ILS
+    # Define tickers whose cost price is originally in ILS (need conversion)
     ILS_COST_TICKERS = ["1159250", "1183441"]
     
-    # --- 📌 שימוש בתקופה מ-session_state ---
-    # טעינת נתונים ראשונית מבוססת על מה ששמור בזיכרון
+    # Get the current selected period from session state
     current_period = st.session_state.current_period
+    # Load stock data based on the selected period
     data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, current_period) 
 
-    # --- Check for data validity ---
+    # Check for data validity
     if data_raw is None or data_raw.empty:
         st.error(f"No historical data found for {ticker}")
         return
@@ -193,39 +207,40 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         current_price_raw = data_raw["Close"].iloc[-1]
 
     
-    # 📌 CONVERSION LOGIC 📌
+    # --- Price Conversion Logic ---
     
     if ticker in ILS_COST_TICKERS:
-        # מחיר עלות בשקלים -> המרה לדולר
+        # Case 1: Cost is in ILS (e.g., TASE stock)
         USD_TO_ILS_RATE = get_forex_rate("ILS=X")
         st.caption(f"Status: Cost Price in ILS | Exchange Rate (USD → ILS): $1 = ₪{USD_TO_ILS_RATE:.4f}")
+        # Convert ILS cost to USD for comparison
         cost_price_usd = cost_price_ils / USD_TO_ILS_RATE
         current_price_usd = current_price_raw 
         
     else:
-        # מצב: מניה זרה/רגילה - אין צורך בהמרה
-        cost_price_usd = cost_price_ils # מחיר עלות גולמי
+        # Case 2: Cost is already in USD (foreign stock)
+        cost_price_usd = cost_price_ils # The raw 'cost price' is already USD
         current_price_usd = current_price_raw
     
-    # 📌 חישובים לכלל המדדים 📌
+    # --- Performance Calculations (USD) ---
     
-    # 1. חישובים בסיסיים (דולר) - למניה בודדת
+    # 1. Per-Share Calculations
     change_abs_per_share = current_price_usd - cost_price_usd
     change_pct_per_share = (change_abs_per_share / cost_price_usd) * 100 if cost_price_usd != 0 else 0
     change_abs_per_share_rounded = round(change_abs_per_share, 2)
     
-    # 2. חישובים כוללים (דולר) - לכלל ההחזקה
+    # 2. Total Position Calculations
     total_cost_usd = cost_price_usd * stock_quantity
     total_current_value_usd = current_price_usd * stock_quantity
     total_profit_loss_usd = change_abs_per_share * stock_quantity
     total_profit_loss_pct = (total_profit_loss_usd / total_cost_usd) * 100 if total_cost_usd != 0 else 0
 
     
-    # --- 📌 הצגת המדדים (שתי שורות, פונט גדול וצבעוני מותאם) 📌 ---
+    # --- Display Performance Metrics ---
     
     st.markdown("### Portfolio Performance (USD $)")
     
-    # --- שורה 1: מדדים למניה בודדת ---
+    # Row 1: Per-Share Metrics
     col1, col2, col3, col4 = st.columns(4)
     
     col1.metric("Cost Price (Per Share)", f"${cost_price_usd:,.2f}") 
@@ -237,6 +252,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         delta_label_pct = f"{change_pct_per_share:.2f}%"
     col3.metric("Change (%)", delta_label_pct, delta_color="normal")
 
+    # Calculate the actual data period for display
     time_delta = data_raw.index[-1] - data_raw.index[0]
     if time_delta.days > 365:
         display_period = f"{time_delta.days // 365}Y"
@@ -248,17 +264,17 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         display_period = f"{time_delta.days}D"
     col4.metric("Data Period", display_period)
 
-    # --- שורה 2: מדדים לכלל ההחזקה (עם פונט גדול וצבעוני מותאם) ---
+    # Row 2: Total Position Metrics (using custom HTML for styling)
     st.markdown("##### Total Position Value")
     col5, col6, col7, col8 = st.columns(4)
 
-    # הגדרות עיצוב אחידות
-    label_font_size = "0.875rem" # גודל כותרת (כמו ב-st.metric)
-    value_font_size = "1.75rem" # גודל ערך (כמו ב-st.metric)
-    label_color = "rgba(49, 51, 63, 0.6)" # צבע כותרת אפור
-    value_color_default = "#31333F" # צבע ערך שחור
+    # Define consistent CSS styles for custom metrics
+    label_font_size = "0.875rem" 
+    value_font_size = "1.75rem" 
+    label_color = "rgba(49, 51, 63, 0.6)" 
+    value_color_default = "#31333F" 
     
-    # --- מדד 1: עלות כוללת (שחור) ---
+    # Metric 1: Total Cost (default color)
     col5.markdown(f"""
     <div style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
         <span style="font-size: {label_font_size}; color: {label_color}; line-height: 1.5;">Total Cost (USD)</span>
@@ -268,7 +284,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     </div>
     """, unsafe_allow_html=True)
 
-    # --- מדד 2: שווי נוכחי (שחור) ---
+    # Metric 2: Total Current Value (default color)
     col6.markdown(f"""
     <div style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
         <span style="font-size: {label_font_size}; color: {label_color}; line-height: 1.5;">Total Current Value (USD)</span>
@@ -278,8 +294,9 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     </div>
     """, unsafe_allow_html=True)
     
-    # --- מדד 3: רווח/הפסד בדולרים (צבעוני) ---
-    p_l_color = "#008000" if total_profit_loss_usd >= 0 else "#FF0000" # ירוק/אדום
+    # Metric 3: Total P/L (USD) (colored)
+    # Determine color (green/red) based on profit/loss
+    p_l_color = "#008000" if total_profit_loss_usd >= 0 else "#FF0000"
     p_l_sign = "+" if total_profit_loss_usd >= 0 else ""
     
     col7.markdown(f"""
@@ -291,7 +308,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     </div>
     """, unsafe_allow_html=True)
     
-    # --- מדד 4: רווח/הפסד באחוזים (צבעוני) ---
+    # Metric 4: Total P/L (%) (colored)
     pct_color = "#008000" if total_profit_loss_pct >= 0 else "#FF0000"
     pct_sign = "+" if total_profit_loss_pct >= 0 else ""
 
@@ -309,19 +326,20 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     # --- Plotly Graph (USD) ---
     st.markdown("### Price Chart (Per Share, USD $)")
     
-    # --- 📌 תיבת הבחירה ממוקמת כאן (מתחת לכותרת, מעל הגרף) ---
+    # --- Period Selection Dropdown ---
     period_options = ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"]
     period_labels = {
         "1w": "1 Week", "1mo": "1 Month", "3mo": "3 Months", "6mo": "6 Months",
         "1y": "1 Year", "2y": "2 Years", "5y": "5 Years", "all": "All"
     }
     
-    # מציאת האינדקס של התקופה הנוכחית
+    # Find the index of the currently selected period for the selectbox default
     try:
         current_period_index = period_options.index(st.session_state.current_period)
     except ValueError:
-        current_period_index = 4 # ברירת מחדל ל-1y
+        current_period_index = 4 # Default to 1y
         
+    # Create the period selectbox
     col1_select, col2_select = st.columns([1, 4])
     with col1_select:
         selected_period = st.selectbox(
@@ -332,12 +350,13 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
             format_func=lambda x: period_labels[x]
         )
 
-    # 📌 בדיקה אם התקופה השתנתה, ואם כן - טעינה מחדש
+    # If the period changes, update session state and rerun the script
     if st.session_state.current_period != selected_period:
         st.session_state.current_period = selected_period
-        st.rerun() # טעינה מחדש של הדף עם התקופה החדשה
+        st.rerun() 
 
     
+    # Create the Plotly figure
     fig = go.Figure()
     color = '#34A853' if total_profit_loss_pct >= 0 else '#EA4335'
     
@@ -350,7 +369,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         line=dict(color=color, width=2),
         fill='tozeroy',
         fillcolor=f'rgba({int(color[1:3],16)}, {int(color[3:5],16)}, {int(color[5:7],16)}, 0.15)',
-        hovertemplate='<b>Date:</b> %{x}<br><b>Price:</b> $%{y:,.2f}<extra></extra>'
+        hoverinfo='x+y'
     ))
     
     # Cost Price Line (Converted to USD)
@@ -360,7 +379,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         mode='lines',
         name='Cost Price (USD)',
         line=dict(color='red', width=2, dash='dash'),
-        hovertemplate='<b>Cost Price:</b> $%{y:,.2f}<extra></extra>'
+        hoverinfo='y'
     ))
     
     # Current Price Marker (in USD)
@@ -370,9 +389,10 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         mode='markers',
         name='Current Price (USD)',
         marker=dict(size=12, color='orange', symbol='star'),
-        hovertemplate='<b>Current Price:</b> $%{y:,.2f}<extra></extra>'
+        hoverinfo='y'
     ))
     
+    # Finalize graph layout
     fig.update_layout(
         title={'text': f"{ticker} - Performance Tracking", 'x':0.5, 'xanchor':'center'},
         xaxis_title="Date",
@@ -383,6 +403,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     
+    # Display the graph
     st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("---") 
@@ -412,11 +433,13 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         pb_ratio = info.get('priceToBook', None)
         dividend_yield = info.get('dividendYield', None)
         
+        # Format metrics, handling N/A values
         pe_ratio_str = f"{pe_ratio:.2f}" if pe_ratio is not None and pd.notna(pe_ratio) else "N/A"
         forward_pe_str = f"{forward_pe:.2f}" if forward_pe is not None and pd.notna(forward_pe) else "N/A"
         pb_ratio_str = f"{pb_ratio:.2f}" if pb_ratio is not None and pd.notna(pb_ratio) else "N/A"
         div_yield_str = f"{dividend_yield * 100:.2f}%" if dividend_yield is not None and pd.notna(dividend_yield) else "N/A"
         
+        # Display fundamental metrics in columns
         f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         
         f_col1.metric("**Market Cap**", format_large_number(market_cap))
@@ -435,6 +458,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         f2_col3.metric("**Avg. Volume**", format_large_number(info.get('averageVolume10days', None)))
         f2_col4.metric("**Div. Yield**", div_yield_str)
 
+        # Show company summary in an expander
         with st.expander("Company Description"):
             st.markdown(info.get('longBusinessSummary', 'No description available.'))
             
@@ -447,6 +471,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     st.markdown("### Analyst Recommendations")
     if recommendations is not None and not recommendations.empty:
         
+        # Get the most recent set of recommendations
         latest_recommendations = recommendations.iloc[-1]
         
         col1, col2, col3, col4, col5 = st.columns(5)
@@ -468,6 +493,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     if quarterly_earnings is not None and not quarterly_earnings.empty:
         
         try:
+            # Get the most recent earnings report
             latest_report = quarterly_earnings.iloc[-1]
             latest_date = latest_report.name 
             revenue = latest_report.get('Revenue', None)
@@ -492,9 +518,10 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
         
     st.markdown("---")
     
-# --- Stock Selection Buttons ---
+# --- 8. Stock Selection Interface ---
 st.subheader("Select a Stock for Analysis")
 cols_per_row = 6
+# Dynamically create a grid of buttons for stock selection
 for i in range(0, len(df), cols_per_row):
     cols = st.columns(cols_per_row)
     for j in range(min(cols_per_row, len(df) - i)):
@@ -508,17 +535,20 @@ for i in range(0, len(df), cols_per_row):
             continue
             
         with cols[j]:
+            # When a button is clicked, store its data in session state
             if st.button(button_label, key=f"btn_{ticker}_{i}_{j}", use_container_width=True):
                 st.session_state.selected_ticker = ticker
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
                 st.session_state.selected_quantity = stock_quantity
-                st.session_state.current_period = '1y' # איפוס התקופה לברירת מחדל
+                # Reset the period to default when a new stock is selected
+                st.session_state.current_period = '1y' 
                 st.rerun() 
 
 st.markdown("---")
 
-# --- Display Selected Stock Analysis ---
+# --- 9. Main App Logic ---
+# If a stock is selected, call the main plotting function
 if st.session_state.selected_ticker is not None:
     
     plot_advanced_stock_graph(
@@ -528,16 +558,19 @@ if st.session_state.selected_ticker is not None:
         st.session_state.selected_name
     )
     
+    # Add a button to return to the main list
     if st.button("Back to Stock List", key="back_button"):
+        # Clear session state to hide the analysis view
         st.session_state.selected_ticker = None
         st.session_state.selected_cost_price = None
         st.session_state.selected_name = None
         st.session_state.selected_quantity = None
-        st.session_state.current_period = '1y' # איפוס התקופה
+        st.session_state.current_period = '1y'
         st.rerun()
 else:
+    # If no stock is selected, show a prompt
     st.info("Select a stock from the list above to see a detailed analysis.")
 
-# --- Footer ---
+# --- 10. Footer ---
 st.markdown("---")
 st.caption(f"Data updated from Yahoo Finance | Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
