@@ -118,25 +118,25 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     change_abs = current_price - cost_price
     change_pct = (change_abs / cost_price) * 100
     
+    # **הוספת עיגול עבור הצגה (change_abs_rounded)**
+    change_abs_rounded = round(change_abs, 3) 
+    
     # Metrics
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric("Cost Price", f"${cost_price:.2f}")
     with col2:
-        # **FIXED st.metric:** Pass the unformatted price as the second argument, and change_abs as delta.
         st.metric(
             "Current Price", 
             f"${current_price:.2f}",
-            delta=change_abs 
-            # delta_color="normal" is the default behavior (green up, red down)
+            delta=change_abs_rounded # שימוש בערך המעוגל
         )
     with col3:
-        # **FIXED st.metric:** Pass the unformatted percentage as the second argument, and change_abs as delta.
         st.metric(
             "Cumulative Change",
             f"{change_pct:.2f}%",
-            delta=change_abs # Using change_abs for delta value (dollar amount) as shown in the image
+            delta=change_abs_rounded # שימוש בערך המעוגל
         )
     with col4:
         # Display the actual range of data
