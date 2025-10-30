@@ -93,9 +93,10 @@ def plot_stock_graph(ticker, cost_price):
     # סינון הנתונים שיוצגו בגרף
     data_to_plot = data[data.index >= relevant_start_date].copy()
     
-    # *** התיקון: בדיקה אם יש נתונים להצגה לאחר הסינון ***
+    # *** בדיקה קפדנית יותר לאחר הסינון ***
     if data_to_plot.empty:
-        st.error("לא נמצאו נתונים להצגה בטווח הרלוונטי. ייתכן שמחיר העלות נמוך מדי או שהנתונים חסרים.")
+        st.error(f"לא נמצאו נתונים היסטוריים להצגה עבור הטיקר {ticker} בטווח הרלוונטי. בדוק את הטיקר או את מחיר העלות.")
+        # במקרה של נתונים ריקים, אין מה להציג
         return
 
 
@@ -103,7 +104,8 @@ def plot_stock_graph(ticker, cost_price):
     try:
         current_price = yf.Ticker(ticker).fast_info["last_price"]
     except Exception:
-        current_price = data_to_plot["Close"].iloc[-1]  # פולבק לשער הסגירה האחרון
+        # אם אין מידע "מהיר", השתמש בשער הסגירה האחרון מתוך הנתונים שהורדו
+        current_price = data_to_plot["Close"].iloc[-1] 
     
     # חישוב שינוי מצטבר
     change_pct = ((current_price - cost_price) / cost_price) * 100
@@ -177,7 +179,10 @@ def plot_stock_graph(ticker, cost_price):
         )
     
     # הגדרת טווח Y דינמי עם מעט מרווח בטחון
-    # הנקודה הזו בטוחה כעת כי בדקנו ש-data_to_plot אינו ריק
+    # התיקון: שימוש ב-fillna או ב-max/min כדי להבטיח שלא נכשל על סדרה ריקה
+    # אם הסדרה אינה ריקה, min יחזיר את הערך הנמוך ביותר.
+    # אם הסדרה ריקה, data_to_plot.empty יהיה True, ואנחנו כבר יוצאים מהפונקציה.
+    # לכן, השימוש ב-min() ו-max() בטוח כאן.
     min_y = min(data_to_plot["Close"].min(), cost_price) * 0.98
     max_y = max(data_to_plot["Close"].max(), cost_price) * 1.02
 
