@@ -43,7 +43,6 @@ def plot_google_stock_graph():
         current_price = data_to_plot.iloc[-1] 
     
     # שער הסגירה היומי הקודם (משמש כקו ייחוס סטנדרטי)
-    # ננסה למצוא את שער הסגירה האחרון לפני הנתונים המוצגים (אחרי סינון NaN)
     previous_close = None
     try:
         # הורדת נתונים יומיים ל-6 ימים
@@ -70,8 +69,8 @@ def plot_google_stock_graph():
     ))
 
     # הוספת קו שער הסגירה הקודם (כמו Prev. close בתמונה)
-    # *** התיקון: בדיקה ש-previous_close אינו NaN לפני הוספתו ***
-    if previous_close is not None and not pd.isna(previous_close):
+    # *** התיקון: בדיקה ישירה של סוג במקום pd.isna כדי למנוע כשלים ב-Pandas ***
+    if isinstance(previous_close, (float, int)) and not pd.isna(previous_close):
         fig.add_hline(
             y=previous_close, 
             line=dict(color='gray', dash='dot', width=1), 
