@@ -16,10 +16,15 @@ st.markdown("---")
 # ודא שנתיב הקובץ הוא נכון
 file_path = "תיק מניות.xlsx"
 
-# --- Data Loading and Cleaning ---
+# --- Data Loading and Cleaning (UPDATED) ---
 @st.cache_data
 def load_portfolio():
-    df_raw = pd.read_excel(file_path, header=None)
+    try:
+        df_raw = pd.read_excel(file_path, header=None)
+    except FileNotFoundError:
+        st.error(f"Error: The file '{file_path}' was not found. Please ensure the Excel file is in the correct directory.")
+        return None
+        
     header_row_idx = None
     for i, row in df_raw.iterrows():
         # מחפשים את 'שינוי מצטבר' כדי למצוא את שורת הכותרת
@@ -32,12 +37,25 @@ def load_portfolio():
 
     df = pd.read_excel(file_path, header=header_row_idx)
     df.columns = [str(col).strip() for col in df.columns]
-    # מסננים שורות ללא טיקר או מחיר עלות
-    df = df.dropna(subset=["טיקר", "מחיר עלות"])
+    
+    # 📌 עדכון: ודא שכל העמודות הנדרשות קיימות
+    required_cols = ["טיקר", "מחיר עלות", "כמות מניות"]
+    if not all(col in df.columns for col in required_cols):
+        st.error(f"Error: The Excel file must contain the columns: {', '.join(required_cols)}")
+        return None
+        
+    # מסננים שורות ללא טיקר, מחיר עלות או כמות
+    df = df.dropna(subset=required_cols)
+    
     # ניקוי והמרה של 'מחיר עלות' למספרי
     df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.\-]', '', regex=True)
     df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
-    df = df.dropna(subset=["מחיר עלות"])
+    
+    # 📌 חדש: ניקוי והמרה של 'כמות מניות' למספרי
+    df["כמות מניות"] = df["כמות מניות"].astype(str).str.replace(r'[^\d\.]', '', regex=True)
+    df["כמות מניות"] = pd.to_numeric(df["כמות מניות"], errors='coerce')
+
+    df = df.dropna(subset=required_cols)
     return df
 
 # --- Ticker Conversion for yfinance ---
@@ -63,17 +81,18 @@ with st.spinner("Loading portfolio stocks..."):
     df = load_portfolio()
     
     if df is None:
-        st.error("Could not find a header row containing 'שינוי מצטבר' (Cumulative Change) in the Excel file, or the file is missing.")
+        st.error("Could not find a header row containing 'שינוי מצטבר' (Cumulative Change) in the Excel file, or the file is missing/invalid.")
         st.stop()
         
     df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
     st.success(f"Loaded {len(df)} stocks from the portfolio.")
 
-# --- Session State Initialization ---
+# --- Session State Initialization (UPDATED) ---
 if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = None
     st.session_state.selected_cost_price = None
     st.session_state.selected_name = None
+    st.session_state.selected_quantity = None # 📌 חדש: כמות מניות
 
 # --- Helper Function for Formatting Large Numbers ---
 def format_large_number(num):
@@ -109,16 +128,16 @@ def get_forex_rate(currency_pair="ILS=X"):
             
         return rate
     except Exception:
-        return 3.7 # שער ידני מקורב
+        return 3.7 
 
-# --- Data Fetching Function (yf_ticker logic) ---
+# --- Data Fetching Function ---
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     # המרה לטיקר ש-yfinance מכירה
     if ticker == "1183441":
         yf_ticker = "SPXS.L" # Invesco S&P 500 UCITS ETF
     elif ticker == "1159250":
-        yf_ticker = "CSPX.L" # iShares Core S&P 500 UCITS ETF (FIXED)
+        yf_ticker = "CSPX.L" # iShares Core S&P 500 UCITS ETF
     else:
         yf_ticker = ticker
         
@@ -146,8 +165,8 @@ def get_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None, None, None, None
         
-# --- Advanced Plotting Function (FINAL FIX: USD vs USD Calculation) ---
-def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
+# --- Advanced Plotting Function (UPDATED: Signature and Metrics) ---
+def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
     
@@ -195,8 +214,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
     if ticker in ILS_COST_TICKERS:
         # מחיר עלות בשקלים -> המרה לדולר
         USD_TO_ILS_RATE = get_forex_rate("ILS=X")
-        # 🟢 השורה המתורגמת:
-        st.caption(f"**Status: Cost Price in ILS | Exchange Rate (USD → ILS):** $1 = ₪{USD_TO_ILS_RATE:.4f}")
+        st.caption(f"Status: Cost Price in ILS | Exchange Rate (USD → ILS): $1 = ₪{USD_TO_ILS_RATE:.4f}")
         
         # 1. המרת מחיר עלות (שקלים -> דולר)
         cost_price_usd = cost_price_ils / USD_TO_ILS_RATE
@@ -206,47 +224,54 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
         
     else:
         # מצב: מניה זרה/רגילה - אין צורך בהמרה
-        cost_price_usd = cost_price_ils # מחיר עלות גולמי
+        cost_price_usd = cost_price_ils # מחיר עלות גולמי (נניח שהוא כבר ב-USD)
         current_price_usd = current_price_raw
     
-    # 2. חישוב רווחים בדולר (USD) - כעת זה USD מול USD
-    change_abs = current_price_usd - cost_price_usd
-    change_pct = (change_abs / cost_price_usd) * 100
-    change_abs_rounded = round(change_abs, 3)
+    # 📌 חישוב שווי כולל (Total Value Calculations) 📌
+    
+    # 1. חישובים בסיסיים (דולר)
+    change_abs_per_share = current_price_usd - cost_price_usd
+    change_pct = (change_abs_per_share / cost_price_usd) * 100
+    
+    # 2. חישובים כוללים (דולר)
+    total_cost_usd = cost_price_usd * stock_quantity
+    total_current_value_usd = current_price_usd * stock_quantity
+    total_profit_loss_usd = change_abs_per_share * stock_quantity
+    
+    # עיגול לצורך תצוגה
+    total_profit_loss_usd_rounded = round(total_profit_loss_usd, 2)
 
     
-    # --- הצגת המדדים (הכל בדולר) ---
+    # --- 📌 הצגת המדדים (עודכן לפי הבקשה) 📌 ---
     
     st.markdown("### Portfolio Performance (USD $)")
-    col1, col2, col3, col4 = st.columns(4)
-    # שימוש ב-cost_price_usd
-    col1.metric("Cost Price (USD)", f"${cost_price_usd:.2f}") 
-    # שימוש ב-current_price_raw (שצוין כדולר) עם הדלתא הנכונה
-    col2.metric("Current Price (USD)", f"${current_price_raw:.2f}", delta=change_abs_rounded)
+    col1, col2, col3, col4 = st.columns(4) 
     
+    # עמודה 1: עלות כוללת
+    col1.metric("Total Cost (USD)", f"${total_cost_usd:,.2f}") 
+    
+    # עמודה 2: שווי נוכחי
+    col2.metric("Total Current Value (USD)", f"${total_current_value_usd:,.2f}")
+
+    # עמודה 3: רווח/הפסד כולל בדולר (עם צבע)
+    col3.metric("Total P/L (USD)", 
+                 value=" ", # ערך ריק (כדי שהדלתא תהיה הצבע הראשי)
+                 delta=f"${total_profit_loss_usd_rounded:,.2f}") # P/L $ (צבעוני)
+    
+    # עמודה 4: רווח/הפסד כולל באחוזים (עם צבע)
     if change_pct >= 0:
-        delta_label = f"+{change_pct:.2f}%"
+        delta_label_pct = f"+{change_pct:.2f}%"
     else:
-        delta_label = f"{change_pct:.2f}%"
-    # הצגת הדלתא האמיתית בדולר ובאחוזים
-    col3.metric("Cumulative Change", f"{change_pct:.2f}%", delta=change_abs_rounded, delta_color="normal")
+        delta_label_pct = f"{change_pct:.2f}%"
     
-    # Data Period Metric
-    time_delta = data_raw.index[-1] - data_raw.index[0]
-    if time_delta.days > 365:
-        display_period = f"{time_delta.days // 365} Years"
-    elif time_delta.days > 30:
-        display_period = f"{time_delta.days // 30} Months"
-    elif time_delta.days >= 7:
-        display_period = f"{time_delta.days // 7} Weeks"
-    else:
-        display_period = f"{time_delta.days} Days"
-    col4.metric("Data Period", display_period)
+    col4.metric("Total P/L (%)",
+                 value=" ", # ערך ריק
+                 delta=delta_label_pct) # P/L % (צבעוני)
     
     st.markdown("---")
     
     # --- Plotly Graph (USD) ---
-    st.markdown("### Price Chart (USD $)")
+    st.markdown("### Price Chart (Per Share, USD $)")
     fig = go.Figure()
     color = '#34A853' if change_pct >= 0 else '#EA4335'
     
@@ -401,7 +426,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_name):
         
     st.markdown("---")
     
-# --- Stock Selection Buttons ---
+# --- Stock Selection Buttons (UPDATED) ---
 st.subheader("Select a Stock for Analysis")
 cols_per_row = 6
 for i in range(0, len(df), cols_per_row):
@@ -410,24 +435,30 @@ for i in range(0, len(df), cols_per_row):
         row = df.iloc[i+j]
         ticker = row["yfinance_ticker"]
         cost_price = row["מחיר עלות"]
+        stock_quantity = row["כמות מניות"] # 📌 חדש: שליפת הכמות
         button_label = str(row["טיקר"]).strip()
+        
         if button_label == "" or button_label.lower() == "nan":
             continue
+            
         with cols[j]:
             if st.button(button_label, key=f"btn_{ticker}_{i}_{j}", use_container_width=True):
                 st.session_state.selected_ticker = ticker
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
+                st.session_state.selected_quantity = stock_quantity # 📌 חדש: שמירת הכמות
                 st.rerun() 
 
 st.markdown("---")
 
-# --- Display Selected Stock Analysis ---
+# --- Display Selected Stock Analysis (UPDATED) ---
 if st.session_state.selected_ticker is not None:
     
+    # 📌 עדכון: העברת הכמות לפונקציית הציור
     plot_advanced_stock_graph(
         st.session_state.selected_ticker,
         st.session_state.selected_cost_price,
+        st.session_state.selected_quantity, 
         st.session_state.selected_name
     )
     
@@ -435,6 +466,7 @@ if st.session_state.selected_ticker is not None:
         st.session_state.selected_ticker = None
         st.session_state.selected_cost_price = None
         st.session_state.selected_name = None
+        st.session_state.selected_quantity = None # 📌 חדש: איפוס הכמות
         st.rerun()
 else:
     st.info("Select a stock from the list above to see a detailed analysis.")
