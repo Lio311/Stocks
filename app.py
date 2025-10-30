@@ -179,12 +179,18 @@ def plot_stock_graph(ticker, cost_price):
         )
     
     # הגדרת טווח Y דינמי עם מעט מרווח בטחון
-    # התיקון: שימוש ב-fillna או ב-max/min כדי להבטיח שלא נכשל על סדרה ריקה
-    # אם הסדרה אינה ריקה, min יחזיר את הערך הנמוך ביותר.
-    # אם הסדרה ריקה, data_to_plot.empty יהיה True, ואנחנו כבר יוצאים מהפונקציה.
-    # לכן, השימוש ב-min() ו-max() בטוח כאן.
-    min_y = min(data_to_plot["Close"].min(), cost_price) * 0.98
-    max_y = max(data_to_plot["Close"].max(), cost_price) * 1.02
+    
+    # *** התיקון לטיפול ב-NaN ובסדרות חסרות נתונים בטווח Y ***
+    # .dropna() מבטיח שלא נכשל על NaN, ו-data_to_plot.empty כבר מטפל בסדרה ריקה לחלוטין.
+    close_prices = data_to_plot["Close"].dropna()
+    
+    if close_prices.empty:
+        # אם אין נתונים מספריים, נשתמש רק במחיר העלות לטווח ה-Y
+        min_y = cost_price * 0.98
+        max_y = cost_price * 1.02
+    else:
+        min_y = min(close_prices.min(), cost_price) * 0.98
+        max_y = max(close_prices.max(), cost_price) * 1.02
 
 
     fig.update_layout(
