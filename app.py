@@ -99,8 +99,8 @@ if selected_data is not None:
         mode='lines',
         name='מחיר סגירה',
         line=dict(color=color, width=2),
-        fill='tonexty',
-        fillcolor=color + '40'
+        fill='tozeroy',
+        fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.25)'
     ))
     
     fig.update_layout(
