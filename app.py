@@ -85,9 +85,15 @@ for i in range(0, len(df), cols_per_row):
         ticker = row["yfinance_ticker"]
         cost_price = row["מחיר עלות"]
 
-        if col.button(row["טיקר"]):
+        # הכנה של label נקי
+        button_label = str(row["טיקר"]).strip()
+        if button_label == "" or button_label.lower() == "nan":
+            continue  # דילוג על שורות ריקות
+
+        if col.button(button_label):
             st.session_state.selected_ticker = ticker
             st.session_state.selected_cost_price = cost_price
+
 
 # הצגת הגרף של המניה שנבחרה
 if st.session_state.selected_ticker:
