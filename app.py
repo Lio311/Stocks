@@ -8,9 +8,10 @@ st.set_page_config(page_title="תיק מניות", layout="wide")
 
 st.title("📊 תיק המניות שלי")
 
-# קריאת הקובץ המקומי
+# קריאת הקובץ המקומי, התעלמות מהשורות הראשונות עד שורה 7 (הנתונים מתחילים משורה 8)
 file_path = "תיק מניות.xlsx"
-df = pd.read_excel(file_path)
+df = pd.read_excel(file_path, skiprows=7)
+
 
 # בדיקה לעמודות נדרשות
 required_cols = {"טיקר", "מחיר עלות", "מחיר זמן אמת"}
