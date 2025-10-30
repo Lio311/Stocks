@@ -70,8 +70,6 @@ def get_stock_data(ticker, period="1y"):
     try:
         stock = yf.Ticker(ticker)
         data = stock.history(period=yf_period)
-        if data.empty:
-            return None, None
         
         try:
             current_price = stock.fast_info["last_price"]
@@ -94,7 +92,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
             index=4,
             format_func=lambda x: {
-                "1w": "7 DAYS",
+                "1w": "1 Week",
                 "1mo": "1 Month",
                 "3mo": "3 Months",
                 "6mo": "6 Months",
@@ -108,14 +106,8 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     # Load Data
     data, current_price = get_stock_data(ticker, period)
     
-    # Error handling with cache clear option
     if data is None or data.empty:
         st.error(f"No data found for {ticker}")
-        
-        if st.button("Clear Data Cache and Retry", key="cache_clear_button"):
-            get_stock_data.clear()
-            st.rerun()
-            
         return
         
     if current_price is None:
@@ -126,7 +118,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     change_abs = current_price - cost_price
     change_pct = (change_abs / cost_price) * 100
     
-    # Rounding for display
+    # **הוספת עיגול עבור הצגה (change_abs_rounded)**
     change_abs_rounded = round(change_abs, 3) 
     
     # Metrics
@@ -138,30 +130,30 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         st.metric(
             "Current Price", 
             f"${current_price:.2f}",
-            delta=change_abs_rounded 
+            delta=change_abs_rounded # שימוש בערך המעוגל
         )
     with col3:
         st.metric(
             "Cumulative Change",
             f"{change_pct:.2f}%",
-            delta=change_abs_rounded 
+            delta=change_abs_rounded # שימוש בערך המעוגל
         )
     with col4:
-        # Determine the data period display
+        # Display the actual range of data
         time_delta = data.index[-1] - data.index[0]
         if time_delta.days > 365:
             display_period = f"{time_delta.days // 365} Years"
         elif time_delta.days > 30:
             display_period = f"{time_delta.days // 30} Months"
         elif time_delta.days >= 7:
-            display_period = f"{time_delta.days // 7} Weeks" if time_delta.days > 7 else f"{time_delta.days} Days"
+            display_period = f"{time_delta.days // 7} Weeks"
         else:
             display_period = f"{time_delta.days} Days"
         st.metric("Data Period", display_period)
         
     st.markdown("---")
     
-    # Create the Plotly Graph
+    # Create the Plotly Graph (Color logic is correct here)
     fig = go.Figure()
     
     # Price Line
@@ -236,19 +228,8 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         st.info(f"**Volatility (SD):**\n${volatility:.2f}")
         
     # Recent Data
-    with st.expander("Recent Data (Last Trading Days)"):
-        # **FIXED: Logic to set the limit based on the selected period**
-        if period == "1w":
-            limit = 7
-            header_text = f"Recent Data (Last {limit} Trading Days)"
-        else:
-            limit = 10
-            header_text = f"Recent Data (Last {limit} Trading Days)"
-            
-        recent_data = data[['Open', 'High', 'Low', 'Close', 'Volume']].tail(limit).copy()
-        
-        st.markdown(f"**{header_text}**") 
-        
+    with st.expander("Recent Data (Last 10 Trading Days)"):
+        recent_data = data[['Open', 'High', 'Low', 'Close', 'Volume']].tail(10).copy()
         recent_data.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
         recent_data = recent_data.round(2)
         st.dataframe(recent_data, use_container_width=True)
@@ -273,8 +254,6 @@ for i in range(0, len(df), cols_per_row):
             
         with cols[j]:
             if st.button(button_label, key=f"btn_{ticker}_{i}_{j}", use_container_width=True):
-                # Clear the stock data cache when a new stock is selected
-                get_stock_data.clear() 
                 st.session_state.selected_ticker = ticker
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
