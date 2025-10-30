@@ -46,14 +46,12 @@ if not required_cols.issubset(df.columns):
     st.error("יש לוודא שלקובץ יש עמודות: טיקר, מחיר עלות, מחיר זמן אמת")
     st.stop()
 
-# שמירת מצב גרף פתוח
-if "active_ticker" not in st.session_state:
-    st.session_state.active_ticker = None
+# שמירת מצב המניה שנבחרה
+if "selected_ticker" not in st.session_state:
+    st.session_state.selected_ticker = None
 
-# פונקציה לפתיחת גרף ולסגירת גרף קודם
-def show_graph(ticker, cost_price, current_price):
-    st.session_state.active_ticker = ticker
-
+# פונקציה להצגת גרף עבור מניה מסוימת
+def plot_stock_graph(ticker, cost_price, current_price):
     start_date = datetime.now() - timedelta(days=365)
     data = yf.download(ticker, start=start_date, progress=False)
     data.reset_index(inplace=True)
@@ -77,7 +75,7 @@ def show_graph(ticker, cost_price, current_price):
     st.write(f"**שינוי מצטבר:** {change_pct:.2f}%")
     st.plotly_chart(fig, use_container_width=True)
 
-# יצירת כפתורים בשורות של 6 כפתורים לכל שורה
+# יצירת כפתורים בראש העמוד
 cols_per_row = 6
 for i in range(0, len(df), cols_per_row):
     cols = st.columns(min(cols_per_row, len(df) - i))
@@ -88,9 +86,14 @@ for i in range(0, len(df), cols_per_row):
         current_price = row["מחיר זמן אמת"]
 
         if col.button(ticker):
-            show_graph(ticker, cost_price, current_price)
+            st.session_state.selected_ticker = ticker
+            st.session_state.selected_cost_price = cost_price
+            st.session_state.selected_current_price = current_price
 
-# הצגת הגרף של המניה שנבחרה אם יש אחת פעילה
-if st.session_state.active_ticker:
-    row = df[df["טיקר"] == st.session_state.active_ticker].iloc[0]
-    show_graph(row["טיקר"], row["מחיר עלות"], row["מחיר זמן אמת"])
+# הצגת הגרף של המניה שנבחרה (מתחת לכל הכפתורים)
+if st.session_state.selected_ticker:
+    plot_stock_graph(
+        st.session_state.selected_ticker,
+        st.session_state.selected_cost_price,
+        st.session_state.selected_current_price
+    )
