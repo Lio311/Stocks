@@ -81,7 +81,9 @@ def plot_stock_graph(ticker, cost_price):
     # מסנן את כל השורות בהן המחיר קטן או שווה למחיר העלות
     dates_at_or_below_cost = data[data["Close"] <= cost_price].index
     
-    if not dates_at_or_below_cost.empty:
+    entry_date_found = not dates_at_or_below_cost.empty
+    
+    if entry_date_found:
         # התאריך המוקדם ביותר שהמניה נסגרה בו במחיר הקנייה או נמוך ממנו
         relevant_start_date = dates_at_or_below_cost[0]
     else:
@@ -114,6 +116,26 @@ def plot_stock_graph(ticker, cost_price):
         mode='lines', 
         name='שער סגירה',
         line=dict(color=line_color, width=3)
+    ))
+
+    # --- הוספת סמן לנקודת הכניסה המשוערת (המחיר והתאריך בו המחיר היה ≤ מחיר העלות) ---
+    if entry_date_found:
+        fig.add_trace(go.Scatter(
+            x=[relevant_start_date], 
+            y=[cost_price], 
+            mode='markers', 
+            name='נקודת קנייה משוערת',
+            marker=dict(size=16, color='Blue', symbol='star', line=dict(width=2, color='White'))
+        ))
+    
+    # --- הוספת סמן למחיר הנוכחי (הנקודה האחרונה על הקו) ---
+    fig.add_trace(go.Scatter(
+        x=[data_to_plot.index[-1]], 
+        y=[current_price], 
+        mode='markers', 
+        name='מחיר נוכחי',
+        # צבע הסמן יהיה זהה לצבע הקו (ירוק/אדום)
+        marker=dict(size=14, color=line_color, symbol='circle', line=dict(width=2, color='white')) 
     ))
     
     # הוספת קו מחיר העלות (בולט יותר)
