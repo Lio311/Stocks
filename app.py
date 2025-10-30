@@ -374,7 +374,7 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     ))
     
     fig.update_layout(
-        title={'text': f"{ticker} - Performance Tracking (All values in USD)", 'x':0.5, 'xanchor':'center'},
+        title={'text': f"{ticker} - Performance Tracking", 'x':0.5, 'xanchor':'center'},
         xaxis_title="Date",
         yaxis_title="Price (USD $)",
         template="plotly_white",
