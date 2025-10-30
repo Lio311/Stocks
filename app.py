@@ -96,6 +96,8 @@ if "selected_name" not in st.session_state:
     st.session_state.selected_name = None
 if "selected_quantity" not in st.session_state:
     st.session_state.selected_quantity = None 
+if "current_period" not in st.session_state:
+    st.session_state.current_period = '1y' # הגדרת תקופת ברירת מחדל
 
 # --- Helper Function for Formatting Large Numbers ---
 def format_large_number(num):
@@ -176,28 +178,10 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     # 📌 הגדרת טיקרים שבהם מחיר העלות הוא בשקלים ILS
     ILS_COST_TICKERS = ["1159250", "1183441"]
     
-    # --- 📌 תיבת הבחירה חזרה למעלה ---
-    col1_select, col2_select = st.columns([1, 4])
-    with col1_select:
-        period = st.selectbox(
-            "Display Period:",
-            ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
-            index=4,
-            key="period_selectbox", 
-            format_func=lambda x: {
-                "1w": "1 Week",
-                "1mo": "1 Month",
-                "3mo": "3 Months",
-                "6mo": "6 Months",
-                "1y": "1 Year",
-                "2y": "2 Years",
-                "5y": "5 Years",
-                "all": "All"
-            }[x]
-        )
-
-    # --- Load Data (based on selection) ---
-    data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, period) 
+    # --- 📌 שימוש בתקופה מ-session_state ---
+    # טעינת נתונים ראשונית מבוססת על מה ששמור בזיכרון
+    current_period = st.session_state.current_period
+    data_raw, current_price_raw, info, recommendations, quarterly_earnings = get_stock_data(ticker, current_period) 
 
     # --- Check for data validity ---
     if data_raw is None or data_raw.empty:
@@ -324,6 +308,36 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     
     # --- Plotly Graph (USD) ---
     st.markdown("### Price Chart (Per Share, USD $)")
+    
+    # --- 📌 תיבת הבחירה ממוקמת כאן (מתחת לכותרת, מעל הגרף) ---
+    period_options = ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"]
+    period_labels = {
+        "1w": "1 Week", "1mo": "1 Month", "3mo": "3 Months", "6mo": "6 Months",
+        "1y": "1 Year", "2y": "2 Years", "5y": "5 Years", "all": "All"
+    }
+    
+    # מציאת האינדקס של התקופה הנוכחית
+    try:
+        current_period_index = period_options.index(st.session_state.current_period)
+    except ValueError:
+        current_period_index = 4 # ברירת מחדל ל-1y
+        
+    col1_select, col2_select = st.columns([1, 4])
+    with col1_select:
+        selected_period = st.selectbox(
+            "Display Period:",
+            options=period_options,
+            index=current_period_index,
+            key="period_selectbox", 
+            format_func=lambda x: period_labels[x]
+        )
+
+    # 📌 בדיקה אם התקופה השתנתה, ואם כן - טעינה מחדש
+    if st.session_state.current_period != selected_period:
+        st.session_state.current_period = selected_period
+        st.rerun() # טעינה מחדש של הדף עם התקופה החדשה
+
+    
     fig = go.Figure()
     color = '#34A853' if total_profit_loss_pct >= 0 else '#EA4335'
     
@@ -499,6 +513,7 @@ for i in range(0, len(df), cols_per_row):
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
                 st.session_state.selected_quantity = stock_quantity
+                st.session_state.current_period = '1y' # איפוס התקופה לברירת מחדל
                 st.rerun() 
 
 st.markdown("---")
@@ -518,6 +533,7 @@ if st.session_state.selected_ticker is not None:
         st.session_state.selected_cost_price = None
         st.session_state.selected_name = None
         st.session_state.selected_quantity = None
+        st.session_state.current_period = '1y' # איפוס התקופה
         st.rerun()
 else:
     st.info("Select a stock from the list above to see a detailed analysis.")
