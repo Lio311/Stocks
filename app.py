@@ -299,8 +299,10 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         col5.metric("Strong Sell", f"{latest_recommendations.get('strongSell', 0):.0f}", delta_color="inverse")
 
         with st.expander("Recommendations Trend (Historical)"):
-            # 💡 התיקון כאן: מילוי ערכי NaN ב-0 והמרה ל-int לפני טרנספוזיציה והצגה.
-            df_display = recommendations.fillna(0).astype(int).T
+            # 💡 התיקון כאן: שימוש ב-'Int64' (Integer Nullable) במקום int כדי למנוע שגיאות המרה
+            # הפעולה מבוצעת על העמודות המספריות בלבד (המלצות)
+            numeric_cols = ['strongBuy', 'buy', 'hold', 'sell', 'strongSell']
+            df_display = recommendations[numeric_cols].astype('Int64', errors='ignore').T
             st.dataframe(df_display, use_container_width=True) 
     else:
         st.info("Analyst recommendations are not available for this stock.")
