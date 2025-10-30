@@ -5,15 +5,26 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="תיק מניות", layout="wide")
-
 st.title("📊 תיק המניות שלי")
 
-# קריאת הקובץ המקומי, התעלמות מהשורות הראשונות עד שורה 7 (הנתונים מתחילים משורה 8)
 file_path = "תיק מניות.xlsx"
-df = pd.read_excel(file_path, skiprows=7)
 
+# קריאה של כל השורות ללא header כדי לא לפספס את הכותרת
+df_raw = pd.read_excel(file_path, header=None)
 
-# בדיקה לעמודות נדרשות
+# חיפוש השורה שבה מתחילות הכותרות האמיתיות
+header_row_idx = df_raw[df_raw.iloc[:, 0] == "שינוי מצטבר(%)"].index[0]
+
+# קריאה מחדש עם השורה הנכונה ככותרת
+df = pd.read_excel(file_path, header=header_row_idx)
+
+# הסרת שורות ריקות או שורות לא רלוונטיות
+df = df.dropna(subset=["טיקר"])
+
+# ניקוי רווחים בשמות העמודות
+df.columns = [str(col).strip() for col in df.columns]
+
+# בדיקה שהעמודות הנדרשות קיימות
 required_cols = {"טיקר", "מחיר עלות", "מחיר זמן אמת"}
 if not required_cols.issubset(df.columns):
     st.error("יש לוודא שלקובץ יש עמודות: טיקר, מחיר עלות, מחיר זמן אמת")
@@ -25,7 +36,7 @@ st.dataframe(df[["טיקר", "מחיר עלות", "מחיר זמן אמת"]])
 # טווח זמן לברירת מחדל (שנה אחורה)
 start_date = datetime.now() - timedelta(days=365)
 
-# הצגת כפתור לכל מניה
+# יצירת כפתורים לכל מניה
 for _, row in df.iterrows():
     ticker = str(row["טיקר"]).strip()
     cost_price = float(row["מחיר עלות"])
