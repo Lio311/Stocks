@@ -4,24 +4,23 @@ import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
-# --- App Configuration ---
+# --- הגדרת העמוד ---
 st.set_page_config(
-    page_title="My Stock Portfolio",
-    page_icon="💼",
+    page_title="תיק המניות שלי",
     layout="wide")
 
-st.title("My Stock Portfolio")
+st.title("תיק המניות שלי")
 st.markdown("---")
 
-file_path = "תיק מניות.xlsx" # The file name remains the same as it's an external file reference
+file_path = "תיק מניות.xlsx"
 
-# --- Data Loading and Cleaning ---
+# --- קריאה וניקוי הנתונים ---
 @st.cache_data
 def load_portfolio():
-    # Read all rows without a header initially
+    # קריאה של כל השורות ללא header
     df_raw = pd.read_excel(file_path, header=None)
     
-    # Search for the header row containing "שינוי מצטבר" (Cumulative Change)
+    # חיפוש שורה עם "שינוי מצטבר"
     header_row_idx = None
     for i, row in df_raw.iterrows():
         if row.astype(str).str.strip().str.contains("שינוי מצטבר", regex=False).any():
@@ -33,20 +32,20 @@ def load_portfolio():
         
     df = pd.read_excel(file_path, header=header_row_idx)
     
-    # Standardize column names (using original Hebrew names for DataFrame access)
+    # ניקוי וסטנדרטיזציה של שמות העמודות
     df.columns = [str(col).strip() for col in df.columns]
     
-    # Drop rows where 'Ticker' or 'Cost Price' is missing
-    df = df.dropna(subset=["טיקר", "מחיר עלות"]) # 'Ticker', 'Cost Price'
+    # סינון שורות ללא נתונים חיוניים
+    df = df.dropna(subset=["טיקר", "מחיר עלות"]) 
     
-    # Clean up Cost Price (removing non-numeric characters except '.' and '-')
+    # ניקוי מחיר עלות
     df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
     df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
     df = df.dropna(subset=["מחיר עלות"])
     
     return df
 
-# --- Ticker Conversion for yfinance ---
+# --- המרת טיקרים לפורמט yfinance ---
 def convert_ticker(t):
     t = str(t).strip()
     if t.startswith("XNAS:"):
@@ -56,34 +55,32 @@ def convert_ticker(t):
     else:
         return t
 
-# --- Portfolio Load Execution ---
-with st.spinner("Loading portfolio stocks..."):
+# --- טעינת התיק ---
+with st.spinner("טוען את תיק המניות..."):
     df = load_portfolio()
     
     if df is None:
-        st.error("Could not find a header row containing 'Cumulative Change' in the Excel file.")
+        st.error("לא נמצא שורת כותרת עם 'שינוי מצטבר' בקובץ האקסל")
         st.stop()
         
-    # Map 'Ticker' to a yfinance-compatible ticker
-    df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker) # 'Ticker' column
-    st.success(f" Loaded {len(df)} stocks from the portfolio.")
+    df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
+    st.success(f"נטענו {len(df)} מניות מהתיק")
 
-# --- Session State Initialization ---
+# --- אתחול מצב הסשן ---
 if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = None
     st.session_state.selected_cost_price = None
     st.session_state.selected_name = None
 
-# --- Data Fetching Function ---
-@st.cache_data(ttl=300) # Cache data for 5 minutes
+# --- פונקציה לקבלת נתונים ---
+@st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
-    # If the requested period is 'all', yfinance uses 'max'
     yf_period = 'max' if period == 'all' else period
     try:
         stock = yf.Ticker(ticker)
         data = stock.history(period=yf_period)
         
-        # Current Price
+        # מחיר נוכחי
         try:
             current_price = stock.fast_info["last_price"]
         except:
@@ -93,156 +90,163 @@ def get_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None
 
-# --- Advanced Plotting Function ---
+# --- פונקציה להצגת גרף משופר ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
-    st.subheader(f" Detailed Analysis: {stock_name}")
+    st.subheader(f"ניתוח מעמיק: {stock_name}")
     
-    # Period Selection
+    # בחירת תקופה
     col1, col2 = st.columns([1, 4])
     with col1:
-        # **UPDATED: Added 'all' option**
+        # **עדכון: הוספת 'שבוע' (1w)**
         period = st.selectbox(
-            "Display Period:",
-            ["1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
+            "תקופת תצוגה:",
+            ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
             index=3,
-            # English display mapping
             format_func=lambda x: {
-                "1mo": "1 Month",
-                "3mo": "3 Months",
-                "6mo": "6 Months",
-                "1y": "1 Year",
-                "2y": "2 Years",
-                "5y": "5 Years",
-                "all": "All" # New option label
+                "1w": "שבוע", # חדש
+                "1mo": "חודש",
+                "3mo": "3 חודשים",
+                "6mo": "6 חודשים",
+                "1y": "שנה",
+                "2y": "שנתיים",
+                "5y": "5 שנים",
+                "all": "כל ההיסטוריה"
             }[x]
         )
         
-    # Load Data
+    # טעינת נתונים
     data, current_price = get_stock_data(ticker, period)
     
     if data is None or data.empty:
-        st.error(f" No data found for {ticker}")
+        st.error(f"לא נמצאו נתונים עבור {ticker}")
         return
         
     if current_price is None:
-        st.warning("Could not retrieve current price, using last closing price.")
+        st.warning("לא ניתן לקבל מחיר נוכחי, משתמש במחיר סגירה אחרון")
         current_price = data["Close"].iloc[-1]
         
-    # Calculate Changes
+    # חישוב שינויים
     change_abs = current_price - cost_price
     change_pct = (change_abs / cost_price) * 100
     
-    # Metrics
+    # מטריקות
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Cost Price", f"${cost_price:.2f}")
+        st.metric("מחיר עלות", f"${cost_price:.2f}")
     with col2:
         st.metric(
-            "Current Price", 
+            "מחיר נוכחי", 
             f"${current_price:.2f}",
             f"${change_abs:.2f}"
         )
     with col3:
         st.metric(
-            "Cumulative Change",
+            "שינוי מצטבר",
             f"{change_pct:.2f}%",
             f"${change_abs:.2f}"
         )
     with col4:
-        # Display the actual range of data
+        # הצגת טווח הזמן בפועל
         time_delta = data.index[-1] - data.index[0]
         if time_delta.days > 365:
-            display_period = f"{time_delta.days // 365} Years"
+            display_period = f"{time_delta.days // 365} שנים"
+        elif time_delta.days > 30:
+            display_period = f"{time_delta.days // 30} חודשים"
+        elif time_delta.days > 7:
+            display_period = f"{time_delta.days // 7} שבועות"
         else:
-            display_period = f"{time_delta.days} Days"
-        st.metric("Period Length", display_period)
-        
+            display_period = f"{time_delta.days} ימים"
+        st.metric("תקופת הנתונים", display_period)
+
     st.markdown("---")
     
-    # Create the Plotly Graph
+    # יצירת הגרף Plotly
     fig = go.Figure()
     
-    # Price Line
+    # קו המחיר
     color = '#34A853' if change_pct >= 0 else '#EA4335'
     fig.add_trace(go.Scatter(
         x=data.index,
         y=data["Close"],
         mode='lines',
-        name='Closing Price',
+        name='שער סגירה',
         line=dict(color=color, width=2),
         fill='tozeroy',
         fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.15)',
-        hovertemplate='<b>Date:</b> %{x}<br><b>Price:</b> $%{y:.2f}<extra></extra>'
+        hovertemplate='<b>תאריך:</b> %{x}<br><b>מחיר:</b> $%{y:.2f}<extra></extra>'
     ))
     
-    # Cost Price Line
+    # קו מחיר העלות
     fig.add_trace(go.Scatter(
         x=[data.index[0], data.index[-1]],
         y=[cost_price, cost_price],
         mode='lines',
-        name='Cost Price',
+        name='מחיר עלות',
         line=dict(color='red', width=2, dash='dash'),
-        hovertemplate='<b>Cost Price:</b> $%{y:.2f}<extra></extra>'
+        hovertemplate='<b>מחיר עלות:</b> $%{y:.2f}<extra></extra>'
     ))
     
-    # Current Price Marker
+    # קו מחיר נוכחי
     fig.add_trace(go.Scatter(
         x=[data.index[-1]],
         y=[current_price],
         mode='markers',
-        name='Current Price',
+        name='מחיר נוכחי',
         marker=dict(size=12, color='orange', symbol='star'),
-        hovertemplate='<b>Current Price:</b> $%{y:.2f}<extra></extra>'
+        hovertemplate='<b>מחיר נוכחי:</b> $%{y:.2f}<extra></extra>'
     ))
     
-    # Update Layout
+    # עדכון פריסה
     fig.update_layout(
-        title=f"{ticker} - Performance Tracking",
-        xaxis_title="Date",
-        yaxis_title="Price ($)",
+        title={
+            'text': f"{ticker} - מעקב ביצועים", 
+            'x': 0.5,
+            'xanchor': 'center'
+        },
+        xaxis_title="תאריך",
+        yaxis_title="מחיר ($)",
         template="plotly_white",
         height=600,
         hovermode='x unified',
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
+            yanchor="top",
+            y=1.08,
             xanchor="right",
             x=1
-        )
+        ),
+        font=dict(family='Arial', size=12),
     )
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # Additional Statistics
-    st.markdown("###  Statistics")
+    # סטטיסטיקות נוספות
+    st.markdown("### סטטיסטיקות")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
+        st.info(f"**מחיר מינימלי:**\n${data['Close'].min():.2f}")
     with col2:
-        st.info(f"**Maximum Price:**\n${data['Close'].max():.2f}")
+        st.info(f"**מחיר מקסימלי:**\n${data['Close'].max():.2f}")
     with col3:
         avg_price = data['Close'].mean()
-        st.info(f"**Average Price:**\n${avg_price:.2f}")
+        st.info(f"**מחיר ממוצע:**\n${avg_price:.2f}")
     with col4:
         volatility = data['Close'].std()
-        st.info(f"**Volatility (SD):**\n${volatility:.2f}")
+        st.info(f"**תנודתיות (SD):**\n${volatility:.2f}")
         
-    # Recent Data
-    with st.expander("📋 Recent Data (Last 10 Trading Days)"):
+    # נתונים אחרונים
+    with st.expander("נתונים אחרונים (10 ימי מסחר)"):
         recent_data = data[['Open', 'High', 'Low', 'Close', 'Volume']].tail(10).copy()
-        # English column names for display
-        recent_data.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+        recent_data.columns = ['פתיחה', 'גבוה', 'נמוך', 'סגירה', 'נפח']
         recent_data = recent_data.round(2)
         st.dataframe(recent_data, use_container_width=True)
 
-# --- Stock Selection Buttons ---
-st.subheader(" Select a Stock for Analysis")
+# --- יצירת כפתורי מניות ---
+st.subheader("בחר מניה לניתוח")
 cols_per_row = 6
 
-# Loop to create buttons
 for i in range(0, len(df), cols_per_row):
     cols = st.columns(cols_per_row)
     for j in range(min(cols_per_row, len(df) - i)):
@@ -251,10 +255,9 @@ for i in range(0, len(df), cols_per_row):
             
         row = df.iloc[i + j]
         ticker = row["yfinance_ticker"]
-        cost_price = row["מחיר עלות"] # Use the internal Cost Price column
+        cost_price = row["מחיר עלות"] 
         
-        # Prepare the clean button label (The Ticker itself)
-        button_label = str(row["טיקר"]).strip() # Use the original Ticker
+        button_label = str(row["טיקר"]).strip()
         if button_label == "" or button_label.lower() == "nan":
             continue
             
@@ -266,7 +269,7 @@ for i in range(0, len(df), cols_per_row):
                 
 st.markdown("---")
 
-# --- Display Selected Stock Analysis ---
+# --- הצגת הניתוח ---
 if st.session_state.selected_ticker is not None:
     plot_advanced_stock_graph(
         st.session_state.selected_ticker,
@@ -274,15 +277,15 @@ if st.session_state.selected_ticker is not None:
         st.session_state.selected_name
     )
     
-    # Button to clear selection
-    if st.button(" Back to Stock List", key="back_button"):
+    # כפתור לניקוי הבחירה
+    if st.button("חזרה לרשימת המניות", key="back_button"):
         st.session_state.selected_ticker = None
         st.session_state.selected_cost_price = None
         st.session_state.selected_name = None
         st.rerun()
 else:
-    st.info(" Select a stock from the list above to see a detailed analysis.")
+    st.info("בחר מניה מהרשימה למעלה כדי לראות ניתוח מפורט")
 
-# --- Footer ---
+# --- פוטר ---
 st.markdown("---")
-st.caption(f" Data updated from Yahoo Finance | Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.caption(f"נתונים מתעדכנים מ-Yahoo Finance | עודכן: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
