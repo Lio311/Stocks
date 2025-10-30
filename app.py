@@ -274,7 +274,22 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         recent_data = data[['Open','High','Low','Close','Volume']].tail(10).copy()
         recent_data = recent_data.round(2)
         st.dataframe(recent_data, use_container_width=True)
-
+        
+# --- JavaScript Scroll Function (NEW) ---
+def scroll_down_script():
+    """מזריק קוד JS כדי לגלוש אוטומטית למטה מעט."""
+    st.markdown(
+        """
+        <script>
+            // ממתין מעט לטעינת האלמנטים
+            setTimeout(function() {
+                // גלילה של 500 פיקסלים למטה. ניתן לשנות את הערך הזה.
+                window.scrollBy(0, 500);
+            }, 50);
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
 
 # --- Stock Selection Buttons ---
 st.subheader("Select a Stock for Analysis")
@@ -290,6 +305,7 @@ for i in range(0, len(df), cols_per_row):
             continue
         with cols[j]:
             if st.button(button_label, key=f"btn_{ticker}_{i}_{j}", use_container_width=True):
+                # לאחר לחיצה, מעדכנים את ה-session_state 
                 st.session_state.selected_ticker = ticker
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
@@ -298,11 +314,16 @@ st.markdown("---")
 
 # --- Display Selected Stock Analysis ---
 if st.session_state.selected_ticker is not None:
+    # מציג את הניתוח
     plot_advanced_stock_graph(
         st.session_state.selected_ticker,
         st.session_state.selected_cost_price,
         st.session_state.selected_name
     )
+    
+    # *** הוספנו כאן את קריאת הגלילה ***
+    # קריאה לפונקציה כדי לגרום לדף לגלוש למטה לאחר טעינת הדף עם התוכן החדש
+    scroll_down_script()
     
     if st.button("Back to Stock List", key="back_button"):
         st.session_state.selected_ticker = None
