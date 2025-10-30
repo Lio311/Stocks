@@ -1,7 +1,98 @@
+import streamlit as st
+import pandas as pd
+import yfinance as yf
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
+
+# --- App Configuration ---
+st.set_page_config(
+    page_title="My Stock Portfolio",
+    layout="wide"
+)
+
+st.title("My Stock Portfolio")
+st.markdown("---")
+
+file_path = "תיק מניות.xlsx"
+
+# --- Data Loading and Cleaning ---
+@st.cache_data
+def load_portfolio():
+    df_raw = pd.read_excel(file_path, header=None)
+    header_row_idx = None
+    for i, row in df_raw.iterrows():
+        if row.astype(str).str.strip().str.contains("שינוי מצטבר", regex=False).any():
+            header_row_idx = i
+            break
+    if header_row_idx is None:
+        return None
+
+    df = pd.read_excel(file_path, header=header_row_idx)
+    df.columns = [str(col).strip() for col in df.columns]
+    df = df.dropna(subset=["טיקר", "מחיר עלות"])
+    df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
+    df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
+    df = df.dropna(subset=["מחיר עלות"])
+    return df
+
+# --- Ticker Conversion for yfinance ---
+def convert_ticker(t):
+    t = str(t).strip()
+    if t.startswith("XNAS:"):
+        return t.split(":")[1]
+    elif t.startswith("XLON:"):
+        return t.split(":")[1] + ".L"
+    else:
+        return t
+
+# --- Portfolio Load Execution ---
+with st.spinner("Loading portfolio stocks..."):
+    df = load_portfolio()
+    
+    if df is None:
+        st.error("Could not find a header row containing 'Cumulative Change' in the Excel file.")
+        st.stop()
+        
+    df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
+    st.success(f"Loaded {len(df)} stocks from the portfolio.")
+
+# --- Session State Initialization ---
+if "selected_ticker" not in st.session_state:
+    st.session_state.selected_ticker = None
+    st.session_state.selected_cost_price = None
+    st.session_state.selected_name = None
+
+# --- Data Fetching Function ---
+@st.cache_data(ttl=300)
+def get_stock_data(ticker, period="1y"):
+    # אם period=1w הורד חודש נתונים כדי לוודא שיש מספיק נקודות
+    yf_period = '1mo' if period == '1w' else ('max' if period == 'all' else period)
+    
+    try:
+        stock = yf.Ticker(ticker)
+        data = stock.history(period=yf_period)
+        
+        if data.empty:
+            return None, None
+
+        # חתוך ל-7 הימים האחרונים אם period=1w
+        if period == "1w":
+            data = data[data.index >= (data.index[-1] - pd.Timedelta(days=7))]
+
+        try:
+            current_price = stock.fast_info["last_price"]
+        except:
+            current_price = data["Close"].iloc[-1]
+
+        return data, current_price
+    except Exception as e:
+        return None, None
+
+# --- Advanced Plotting Function ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     st.subheader(f"Detailed Analysis: {stock_name}")
     
-    # --- Period Selection ---
+    # Period Selection
     col1, col2 = st.columns([1, 4])
     with col1:
         period = st.selectbox(
@@ -19,8 +110,8 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
                 "all": "All"
             }[x]
         )
-    
-    # --- Load Data ---
+
+    # Load Data
     data, current_price = get_stock_data(ticker, period)
     
     if data is None or data.empty:
@@ -31,12 +122,12 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         st.warning("Could not retrieve current price, using last closing price.")
         current_price = data["Close"].iloc[-1]
         
-    # --- Calculate Changes ---
+    # Calculate Changes
     change_abs = current_price - cost_price
     change_pct = (change_abs / cost_price) * 100
-    change_abs_rounded = round(change_abs, 3)  # ערך מעוגל להצגה
+    change_abs_rounded = round(change_abs, 3)
     
-    # --- Metrics Display ---
+    # Metrics
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Cost Price", f"${cost_price:.2f}")
     col2.metric("Current Price", f"${current_price:.2f}", delta=change_abs_rounded)
@@ -56,7 +147,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.markdown("---")
     
-    # --- Create Plotly Graph ---
+    # Plotly Graph
     fig = go.Figure()
     color = '#34A853' if change_pct >= 0 else '#EA4335'
     
@@ -68,11 +159,11 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         name='Closing Price',
         line=dict(color=color, width=2),
         fill='tozeroy',
-        fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.15)',
+        fillcolor=f'rgba({int(color[1:3],16)}, {int(color[3:5],16)}, {int(color[5:7],16)}, 0.15)',
         hovertemplate='<b>Date:</b> %{x}<br><b>Price:</b> $%{y:.2f}<extra></extra>'
     ))
     
-    # Cost Price
+    # Cost Price Line
     fig.add_trace(go.Scatter(
         x=[data.index[0], data.index[-1]],
         y=[cost_price, cost_price],
@@ -92,9 +183,8 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         hovertemplate='<b>Current Price:</b> $%{y:.2f}<extra></extra>'
     ))
     
-    # Layout
     fig.update_layout(
-        title={'text': f"{ticker} - Performance Tracking", 'x': 0.5, 'xanchor': 'center'},
+        title={'text': f"{ticker} - Performance Tracking", 'x':0.5, 'xanchor':'center'},
         xaxis_title="Date",
         yaxis_title="Price ($)",
         template="plotly_white",
@@ -105,7 +195,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # --- Statistics ---
+    # Statistics
     st.markdown("### Statistics")
     col1, col2, col3, col4 = st.columns(4)
     col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
@@ -113,8 +203,48 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     col3.info(f"**Average Price:**\n${data['Close'].mean():.2f}")
     col4.info(f"**Volatility (SD):**\n${data['Close'].std():.2f}")
     
-    # --- Recent Data Table ---
+    # Recent Data
     with st.expander("Recent Data (Last 10 Trading Days)"):
-        recent_data = data[['Open', 'High', 'Low', 'Close', 'Volume']].tail(10).copy()
+        recent_data = data[['Open','High','Low','Close','Volume']].tail(10).copy()
         recent_data = recent_data.round(2)
         st.dataframe(recent_data, use_container_width=True)
+
+# --- Stock Selection Buttons ---
+st.subheader("Select a Stock for Analysis")
+cols_per_row = 6
+for i in range(0, len(df), cols_per_row):
+    cols = st.columns(cols_per_row)
+    for j in range(min(cols_per_row, len(df) - i)):
+        row = df.iloc[i+j]
+        ticker = row["yfinance_ticker"]
+        cost_price = row["מחיר עלות"]
+        button_label = str(row["טיקר"]).strip()
+        if button_label == "" or button_label.lower() == "nan":
+            continue
+        with cols[j]:
+            if st.button(button_label, key=f"btn_{ticker}_{i}_{j}", use_container_width=True):
+                st.session_state.selected_ticker = ticker
+                st.session_state.selected_cost_price = cost_price
+                st.session_state.selected_name = button_label
+
+st.markdown("---")
+
+# --- Display Selected Stock Analysis ---
+if st.session_state.selected_ticker is not None:
+    plot_advanced_stock_graph(
+        st.session_state.selected_ticker,
+        st.session_state.selected_cost_price,
+        st.session_state.selected_name
+    )
+    
+    if st.button("Back to Stock List", key="back_button"):
+        st.session_state.selected_ticker = None
+        st.session_state.selected_cost_price = None
+        st.session_state.selected_name = None
+        st.rerun()
+else:
+    st.info("Select a stock from the list above to see a detailed analysis.")
+
+# --- Footer ---
+st.markdown("---")
+st.caption(f"Data updated from Yahoo Finance | Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
