@@ -101,10 +101,10 @@ def get_stock_data(ticker, period="1y"):
         # משיכת נתונים פונדמנטליים
         info = stock.info
         
-        # חדש: משיכת המלצות אנליסטים
+        # משיכת המלצות אנליסטים
         recommendations = stock.get_recommendations_summary() 
         
-        # חדש: משיכת רווחים רבעוניים
+        # משיכת רווחים רבעוניים
         quarterly_earnings = stock.quarterly_earnings
         
         if data.empty:
@@ -125,7 +125,7 @@ def get_stock_data(ticker, period="1y"):
         # st.error(f"Error fetching data for {ticker}: {e}") # ניתן להשתמש לדיבוג
         return None, None, None, None, None
         
-# --- Advanced Plotting Function (Updated) ---
+# --- Advanced Plotting Function (Modified) ---
 def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.subheader(f"Detailed Analysis: {stock_name}")
@@ -245,6 +245,22 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     
     st.markdown("---") # מפריד אחרי הגרף
     
+    # --- Price Statistics (MOVED TO HERE) ---
+    st.markdown("### Price Statistics")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
+    col2.info(f"**Maximum Price:**\n${data['Close'].max():.2f}")
+    col3.info(f"**Average Price:**\n${data['Close'].mean():.2f}")
+    col4.info(f"**Volatility (SD):**\n${data['Close'].std():.2f}")
+    
+    # Recent Data
+    with st.expander("Recent Data (Last 10 Trading Days)"):
+        recent_data = data[['Open','High','Low','Close','Volume']].tail(10).copy()
+        recent_data = recent_data.round(2)
+        st.dataframe(recent_data, use_container_width=True)
+        
+    st.markdown("---") 
+
     # --- Key Fundamental Data ---
     st.markdown("### Key Fundamental Data")
     if info is not None:
@@ -298,7 +314,6 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         col4.metric("Sell", f"{latest_recommendations.get('sell', 0):.0f}", delta_color="inverse")
         col5.metric("Strong Sell", f"{latest_recommendations.get('strongSell', 0):.0f}", delta_color="inverse")
 
-        # ❗ ההיסטוריה של ההמלצות הוסרה כפי שביקשת
     else:
         st.info("Analyst recommendations are not available for this stock.")
 
@@ -333,22 +348,7 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         st.info("Quarterly earnings data is not available for this stock.")
         
     st.markdown("---")
-
-    # --- Price Statistics (Original Section) ---
-    st.markdown("### Price Statistics")
-    col1, col2, col3, col4 = st.columns(4)
-    col1.info(f"**Minimum Price:**\n${data['Close'].min():.2f}")
-    col2.info(f"**Maximum Price:**\n${data['Close'].max():.2f}")
-    col3.info(f"**Average Price:**\n${data['Close'].mean():.2f}")
-    col4.info(f"**Volatility (SD):**\n${data['Close'].std():.2f}")
     
-    # Recent Data
-    with st.expander("Recent Data (Last 10 Trading Days)"):
-        recent_data = data[['Open','High','Low','Close','Volume']].tail(10).copy()
-        recent_data = recent_data.round(2)
-        st.dataframe(recent_data, use_container_width=True)
-
-
 # --- Stock Selection Buttons ---
 st.subheader("Select a Stock for Analysis")
 cols_per_row = 6
@@ -375,8 +375,6 @@ st.markdown("---")
 
 # --- Display Selected Stock Analysis ---
 if st.session_state.selected_ticker is not None:
-    
-    # ❗ הפקודה לגלילה אוטומטית הוסרה כפי שביקשת
     
     # מציג את הניתוח
     plot_advanced_stock_graph(
