@@ -1,222 +1,260 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
+import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # הגדרת העמוד
 st.set_page_config(
-    page_title="מניית Google - ניתוח",
-    page_icon="📈",
+    page_title="תיק המניות שלי",
+    page_icon="💼",
     layout="wide"
 )
 
-# כותרת ראשית
-st.title("📊 ניתוח מניית Google (Alphabet Inc.)")
+st.title("💼 תיק המניות שלי")
 st.markdown("---")
 
-# סמל המניה
-ticker = "GOOGL"
+file_path = "תיק מניות.xlsx"
 
-# פונקציה לטעינת נתונים עם cache
-@st.cache_data(ttl=300)  # cache למשך 5 דקות
-def load_data(period):
-    stock = yf.Ticker(ticker)
-    data = stock.history(period=period)
-    return data
-
-# טעינת נתונים
-with st.spinner("טוען נתונים..."):
-    try:
-        data_year = load_data("1y")
-        data_month = load_data("1mo")
-        data_week = load_data("5d")
-        
-        # מידע כללי על המניה
-        stock_info = yf.Ticker(ticker).info
-        
-        st.success("✅ הנתונים נטענו בהצלחה!")
-        
-    except Exception as e:
-        st.error(f"❌ שגיאה בטעינת הנתונים: {e}")
-        st.stop()
-
-# תצוגת מידע כללי
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    current_price = data_year['Close'].iloc[-1]
-    st.metric("מחיר נוכחי", f"${current_price:.2f}")
-
-with col2:
-    day_change = data_week['Close'].iloc[-1] - data_week['Close'].iloc[-2] if len(data_week) > 1 else 0
-    day_change_pct = (day_change / data_week['Close'].iloc[-2] * 100) if len(data_week) > 1 else 0
-    st.metric("שינוי יומי", f"${day_change:.2f}", f"{day_change_pct:.2f}%")
-
-with col3:
-    week_change_pct = ((data_week['Close'].iloc[-1] / data_week['Close'].iloc[0]) - 1) * 100
-    st.metric("שינוי שבועי", f"{week_change_pct:.2f}%")
-
-with col4:
-    year_change_pct = ((data_year['Close'].iloc[-1] / data_year['Close'].iloc[0]) - 1) * 100
-    st.metric("שינוי שנתי", f"{year_change_pct:.2f}%")
-
-st.markdown("---")
-
-# בחירת תקופה
-st.subheader("🔍 בחר תקופת תצוגה")
-period_option = st.radio(
-    "תקופה:",
-    ["שנה אחרונה", "חודש אחרון", "שבוע אחרון", "הכל"],
-    horizontal=True
-)
-
-# בחירת נתונים לפי תקופה
-if period_option == "שנה אחרונה":
-    selected_data = data_year
-    title = "מחיר מניית Google - שנה אחרונה"
-    color = '#4285F4'
-elif period_option == "חודש אחרון":
-    selected_data = data_month
-    title = "מחיר מניית Google - חודש אחרון"
-    color = '#EA4335'
-elif period_option == "שבוע אחרון":
-    selected_data = data_week
-    title = "מחיר מניית Google - שבוע אחרון"
-    color = '#34A853'
-else:  # הכל
-    selected_data = None
-
-# תצוגת גרפים
-if selected_data is not None:
-    # גרף בודד
-    st.subheader(title)
+# קריאה וניקוי הנתונים
+@st.cache_data
+def load_portfolio():
+    # קריאה של כל השורות ללא header
+    df_raw = pd.read_excel(file_path, header=None)
     
+    # חיפוש שורה עם "שינוי מצטבר"
+    header_row_idx = None
+    for i, row in df_raw.iterrows():
+        if row.astype(str).str.strip().str.contains("שינוי מצטבר").any():
+            header_row_idx = i
+            break
+    
+    if header_row_idx is None:
+        return None
+    
+    df = pd.read_excel(file_path, header=header_row_idx)
+    df.columns = [str(col).strip() for col in df.columns]
+    df = df.dropna(subset=["טיקר", "מחיר עלות"])
+    
+    # ניקוי מחיר עלות
+    df["מחיר עלות"] = df["מחיר עלות"].astype(str).str.replace(r'[^\d\.-]', '', regex=True)
+    df["מחיר עלות"] = pd.to_numeric(df["מחיר עלות"], errors='coerce')
+    df = df.dropna(subset=["מחיר עלות"])
+    
+    return df
+
+# המרת טיקרים לפורמט yfinance
+def convert_ticker(t):
+    t = str(t).strip()
+    if t.startswith("XNAS:"):
+        return t.split(":")[1]  # NASDAQ
+    elif t.startswith("XLON:"):
+        return t.split(":")[1] + ".L"  # LSE
+    else:
+        return t
+
+# טעינת התיק
+with st.spinner("טוען את תיק המניות..."):
+    df = load_portfolio()
+    
+    if df is None:
+        st.error("❌ לא נמצא שורת כותרת עם 'שינוי מצטבר' בקובץ האקסל")
+        st.stop()
+    
+    df["yfinance_ticker"] = df["טיקר"].apply(convert_ticker)
+    st.success(f"✅ נטענו {len(df)} מניות מהתיק")
+
+# מצב המניה שנבחרה
+if "selected_ticker" not in st.session_state:
+    st.session_state.selected_ticker = None
+    st.session_state.selected_cost_price = None
+    st.session_state.selected_name = None
+
+# פונקציה לקבלת נתונים
+@st.cache_data(ttl=300)
+def get_stock_data(ticker, period="1y"):
+    try:
+        stock = yf.Ticker(ticker)
+        data = stock.history(period=period)
+        
+        # מחיר נוכחי
+        try:
+            current_price = stock.fast_info["last_price"]
+        except:
+            current_price = data["Close"].iloc[-1] if not data.empty else None
+        
+        return data, current_price
+    except Exception as e:
+        return None, None
+
+# פונקציה להצגת גרף משופר
+def plot_advanced_stock_graph(ticker, cost_price, stock_name):
+    st.subheader(f"📈 ניתוח מעמיק: {stock_name}")
+    
+    # בחירת תקופה
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        period = st.selectbox(
+            "תקופת תצוגה:",
+            ["1mo", "3mo", "6mo", "1y", "2y", "5y"],
+            index=3,
+            format_func=lambda x: {
+                "1mo": "חודש",
+                "3mo": "3 חודשים",
+                "6mo": "6 חודשים",
+                "1y": "שנה",
+                "2y": "שנתיים",
+                "5y": "5 שנים"
+            }[x]
+        )
+    
+    # טעינת נתונים
+    data, current_price = get_stock_data(ticker, period)
+    
+    if data is None or data.empty:
+        st.error(f"❌ לא נמצאו נתונים עבור {ticker}")
+        return
+    
+    if current_price is None:
+        st.warning("⚠️ לא ניתן לקבל מחיר נוכחי, משתמש במחיר סגירה אחרון")
+        current_price = data["Close"].iloc[-1]
+    
+    # חישוב שינויים
+    change_abs = current_price - cost_price
+    change_pct = (change_abs / cost_price) * 100
+    
+    # מטריקות
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("מחיר עלות", f"${cost_price:.2f}")
+    
+    with col2:
+        st.metric(
+            "מחיר נוכחי", 
+            f"${current_price:.2f}",
+            f"${change_abs:.2f}"
+        )
+    
+    with col3:
+        st.metric(
+            "שינוי מצטבר",
+            f"{change_pct:.2f}%",
+            f"${change_abs:.2f}"
+        )
+    
+    with col4:
+        total_days = (data.index[-1] - data.index[0]).days
+        st.metric("תקופה", f"{total_days} ימים")
+    
+    st.markdown("---")
+    
+    # יצירת הגרף
     fig = go.Figure()
+    
+    # קו המחיר
+    color = '#34A853' if change_pct >= 0 else '#EA4335'
     fig.add_trace(go.Scatter(
-        x=selected_data.index,
-        y=selected_data['Close'],
+        x=data.index,
+        y=data["Close"],
         mode='lines',
-        name='מחיר סגירה',
+        name='שער סגירה',
         line=dict(color=color, width=2),
         fill='tozeroy',
-        fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.25)'
+        fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.15)',
+        hovertemplate='<b>תאריך:</b> %{x}<br><b>מחיר:</b> $%{y:.2f}<extra></extra>'
+    ))
+    
+    # קו מחיר העלות
+    fig.add_trace(go.Scatter(
+        x=[data.index[0], data.index[-1]],
+        y=[cost_price, cost_price],
+        mode='lines',
+        name='מחיר עלות',
+        line=dict(color='red', width=2, dash='dash'),
+        hovertemplate='<b>מחיר עלות:</b> $%{y:.2f}<extra></extra>'
+    ))
+    
+    # קו מחיר נוכחי
+    fig.add_trace(go.Scatter(
+        x=[data.index[-1]],
+        y=[current_price],
+        mode='markers',
+        name='מחיר נוכחי',
+        marker=dict(size=12, color='orange', symbol='star'),
+        hovertemplate='<b>מחיר נוכחי:</b> $%{y:.2f}<extra></extra>'
     ))
     
     fig.update_layout(
+        title=f"{ticker} - מעקב ביצועים",
         xaxis_title="תאריך",
         yaxis_title="מחיר ($)",
+        template="plotly_white",
+        height=600,
         hovermode='x unified',
-        height=500,
-        template='plotly_white'
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
     )
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # סטטיסטיקות
-    col1, col2, col3 = st.columns(3)
+    # סטטיסטיקות נוספות
+    st.markdown("### 📊 סטטיסטיקות")
+    col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
-        st.info(f"**מחיר מינימלי:** ${selected_data['Close'].min():.2f}")
+        st.info(f"**מחיר מינימלי:**\n${data['Close'].min():.2f}")
+    
     with col2:
-        st.info(f"**מחיר מקסימלי:** ${selected_data['Close'].max():.2f}")
+        st.info(f"**מחיר מקסימלי:**\n${data['Close'].max():.2f}")
+    
     with col3:
-        avg_price = selected_data['Close'].mean()
-        st.info(f"**מחיר ממוצע:** ${avg_price:.2f}")
+        avg_price = data['Close'].mean()
+        st.info(f"**מחיר ממוצע:**\n${avg_price:.2f}")
+    
+    with col4:
+        volatility = data['Close'].std()
+        st.info(f"**תנודתיות (SD):**\n${volatility:.2f}")
+    
+    # נתונים אחרונים
+    with st.expander("📋 נתונים אחרונים (10 ימי מסחר)"):
+        recent_data = data[['Open', 'High', 'Low', 'Close', 'Volume']].tail(10).copy()
+        recent_data.columns = ['פתיחה', 'גבוה', 'נמוך', 'סגירה', 'נפח']
+        recent_data = recent_data.round(2)
+        st.dataframe(recent_data, use_container_width=True)
 
-else:
-    # תצוגת כל התקופות
-    st.subheader("📈 השוואת כל התקופות")
-    
-    # גרף 1: שנה
-    st.markdown("### שנה אחרונה")
-    fig1 = go.Figure()
-    fig1.add_trace(go.Scatter(
-        x=data_year.index,
-        y=data_year['Close'],
-        mode='lines',
-        line=dict(color='#4285F4', width=2),
-        fill='tonexty'
-    ))
-    fig1.update_layout(
-        xaxis_title="תאריך",
-        yaxis_title="מחיר ($)",
-        height=400,
-        template='plotly_white'
-    )
-    st.plotly_chart(fig1, use_container_width=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # גרף 2: חודש
-        st.markdown("### חודש אחרון")
-        fig2 = go.Figure()
-        fig2.add_trace(go.Scatter(
-            x=data_month.index,
-            y=data_month['Close'],
-            mode='lines',
-            line=dict(color='#EA4335', width=2),
-            fill='tonexty'
-        ))
-        fig2.update_layout(
-            xaxis_title="תאריך",
-            yaxis_title="מחיר ($)",
-            height=350,
-            template='plotly_white'
-        )
-        st.plotly_chart(fig2, use_container_width=True)
-    
-    with col2:
-        # גרף 3: שבוע
-        st.markdown("### שבוע אחרון")
-        fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(
-            x=data_week.index,
-            y=data_week['Close'],
-            mode='lines+markers',
-            line=dict(color='#34A853', width=2),
-            fill='tonexty'
-        ))
-        fig3.update_layout(
-            xaxis_title="תאריך",
-            yaxis_title="מחיר ($)",
-            height=350,
-            template='plotly_white'
-        )
-        st.plotly_chart(fig3, use_container_width=True)
+# יצירת כפתורי מניות
+st.subheader("🎯 בחר מניה לניתוח")
 
-# טבלת נתונים
+cols_per_row = 6
+buttons_created = 0
+
+for i in range(0, len(df), cols_per_row):
+    cols = st.columns(cols_per_row)
+    for j in range(min(cols_per_row, len(df) - i)):
+        row = df.iloc[i + j]
+        ticker = row["yfinance_ticker"]
+        cost_price = row["מחיר עלות"]
+        
+        # הכנה של label נקי
+        button_label = str(row["טיקר"]).strip()
+        if button_label == "" or button_label.lower() == "nan":
+            continue
+        
+        # חישוב מהיר של שינוי (אם קיים במצב)
+        button_text = button_label
+        
+        if cols[j].button(button_text, key=f"btn_{i}_{j}", use_container_width=True):
+            st.session_state.selected_ticker = ticker
+            st.session_state.selected_cost_price = cost_price
+            st.session_state.selected_name = button_label
+            st.rerun()
+        
+        buttons_created += 1
+
 st.markdown("---")
-st.subheader("📋 נתונים גולמיים")
-
-if selected_data is not None:
-    display_data = selected_data[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
-    display_data.columns = ['פתיחה', 'גבוה', 'נמוך', 'סגירה', 'נפח']
-    st.dataframe(display_data.tail(10), use_container_width=True)
-else:
-    tab1, tab2, tab3 = st.tabs(["שנה", "חודש", "שבוע"])
-    
-    with tab1:
-        display_year = data_year[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
-        display_year.columns = ['פתיחה', 'גבוה', 'נמוך', 'סגירה', 'נפח']
-        st.dataframe(display_year.tail(10), use_container_width=True)
-    
-    with tab2:
-        display_month = data_month[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
-        display_month.columns = ['פתיחה', 'גבוה', 'נמוך', 'סגירה', 'נפח']
-        st.dataframe(display_month.tail(10), use_container_width=True)
-    
-    with tab3:
-        display_week = data_week[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
-        display_week.columns = ['פתיחה', 'גבוה', 'נמוך', 'סגירה', 'נפח']
-        st.dataframe(display_week, use_container_width=True)
-
-# כפתור רענון
-st.markdown("---")
-if st.button("🔄 רענן נתונים"):
-    st.cache_data.clear()
-    st.rerun()
-
-# footer
-st.markdown("---")
-st.caption(f"נתונים מתעדכנים מ-Yahoo Finance | עודכן לאחרונה: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
