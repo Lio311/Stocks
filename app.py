@@ -64,13 +64,11 @@ if "selected_ticker" not in st.session_state:
     st.session_state.selected_name = None
 
 # --- Data Fetching Function ---
-# נשמור את הפונקציה הזו גלובלית כדי שנוכל לנקות אותה
 @st.cache_data(ttl=300)
 def get_stock_data(ticker, period="1y"):
     yf_period = 'max' if period == 'all' else period
     try:
         stock = yf.Ticker(ticker)
-        # שינוי קטן: אם הנתונים ריקים, נחזיר None במקום DataFrame ריק
         data = stock.history(period=yf_period)
         if data.empty:
             return None, None
@@ -91,13 +89,13 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     # Period Selection
     col1, col2 = st.columns([1, 4])
     with col1:
-        # **הערה: אם יש שגיאת מטמון, המשתמש יכול לבחור תקופה אחרת ואז לחזור ל-1w**
         period = st.selectbox(
             "Display Period:",
             ["1w", "1mo", "3mo", "6mo", "1y", "2y", "5y", "all"],
             index=4,
+            # **UPDATED: '1 Week' changed to '7 DAYS'**
             format_func=lambda x: {
-                "1w": "1 Week",
+                "1w": "7 DAYS",
                 "1mo": "1 Month",
                 "3mo": "3 Months",
                 "6mo": "6 Months",
@@ -111,11 +109,10 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
     # Load Data
     data, current_price = get_stock_data(ticker, period)
     
-    # **תנאי שגיאה משופר:** מציג כפתור לניקוי המטמון
+    # Error handling with cache clear option
     if data is None or data.empty:
         st.error(f"No data found for {ticker}")
         
-        # כפתור לניקוי המטמון של פונקציית הנתונים
         if st.button("Clear Data Cache and Retry", key="cache_clear_button"):
             get_stock_data.clear()
             st.rerun()
@@ -145,8 +142,6 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
             delta=change_abs_rounded 
         )
     with col3:
-        # **תיקון: הצגת השינוי באחוזים כערך הראשי של המטריקה**
-        # הערך של הדלתא נשאר בדולרים כדי להתאים לתמונה
         st.metric(
             "Cumulative Change",
             f"{change_pct:.2f}%",
@@ -160,7 +155,8 @@ def plot_advanced_stock_graph(ticker, cost_price, stock_name):
         elif time_delta.days > 30:
             display_period = f"{time_delta.days // 30} Months"
         elif time_delta.days >= 7:
-            display_period = f"{time_delta.days // 7} Weeks"
+            # **Change 'Weeks' to 'Days' for consistency if displaying less than a week**
+            display_period = f"{time_delta.days} Days" if time_delta.days < 7 else f"{time_delta.days // 7} Weeks" 
         else:
             display_period = f"{time_delta.days} Days"
         st.metric("Data Period", display_period)
@@ -268,12 +264,11 @@ for i in range(0, len(df), cols_per_row):
             
         with cols[j]:
             if st.button(button_label, key=f"btn_{ticker}_{i}_{j}", use_container_width=True):
-                # **הערה: ננקה את המטמון של נתוני המניות כאשר מניה חדשה נבחרת**
+                # Clear the stock data cache when a new stock is selected
                 get_stock_data.clear() 
                 st.session_state.selected_ticker = ticker
                 st.session_state.selected_cost_price = cost_price
                 st.session_state.selected_name = button_label
-                # אין צורך ב-rerun, זה יתרחש אוטומטית כשהסשן משתנה
                 
 st.markdown("---")
 
