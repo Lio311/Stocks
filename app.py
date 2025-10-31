@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 # --- 1. Page Configuration ---
 st.set_page_config(
     page_title="My Stock Portfolio",
-    layout="wide"
+    layout="wide",
+    page_icon ="📈"
 )
 
 st.title("My Stock Portfolio")
