@@ -4,3 +4,4 @@ yfinance
 plotly
 openpyxl
 openai
+yahoo_fin
