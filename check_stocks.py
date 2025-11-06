@@ -9,6 +9,17 @@ import re
 from datetime import datetime
 import traceback # לניפוי שגיאות
 
+# --- NEW IMPORT ---
+# This library helps us scan the market for losers
+# Make sure to install it: pip install yahoo_fin
+try:
+    from yahoo_fin import stock_info as si
+except ImportError:
+    print("Error: 'yahoo_fin' library not found.")
+    print("Please install it by running: pip install yahoo_fin")
+    exit()
+# -----------------
+
 # --- Configuration ---
 PORTFOLIO_FILE = 'תיק מניות.xlsx'
 TICKER_COLUMN = 'טיקר'
@@ -29,7 +40,6 @@ def clean_price(price_str):
     if not isinstance(price_str, str):
         price_str = str(price_str)
     
-    # מסיר כל דבר שאינו ספרה, נקודה, או מינוס (למקרה הצורך)
     cleaned_str = re.sub(r"[^0-9.-]", "", price_str)
     
     try:
@@ -38,7 +48,67 @@ def clean_price(price_str):
         print(f"Warning: Could not convert price string '{price_str}' to float.")
         return None
 
-def generate_html_report(portfolio_details):
+def convert_market_cap_to_float(cap_str):
+    """ NEW: Converts market cap strings (e.g., '1.5T', '250B', '100M') to float. """
+    if not isinstance(cap_str, str) or cap_str == 'N/A':
+        return 0.0
+    
+    cap_str = cap_str.upper()
+    multiplier = 1.0
+    
+    if 'T' in cap_str:
+        multiplier = 1_000_000_000_000
+    elif 'B' in cap_str:
+        multiplier = 1_000_000_000
+    elif 'M' in cap_str:
+        multiplier = 1_000_000
+    
+    # Remove the letter and any other non-numeric chars (except dot)
+    num_str = re.sub(r"[^0-9.]", "", cap_str)
+    try:
+        return float(num_str) * multiplier
+    except ValueError:
+        return 0.0
+
+def get_general_market_losers():
+    """ NEW: Scans Yahoo Finance for top losers and filters them. """
+    print("\nScanning general market for big losers...")
+    try:
+        # Get the day's top losers from Yahoo's screener
+        losers_df = si.get_day_losers()
+        
+        if losers_df.empty:
+            print("Could not fetch general market losers.")
+            return []
+
+        # Clean and filter data
+        # 1. Convert Market Cap string to a float number
+        losers_df['Market Cap Float'] = losers_df['Market Cap'].apply(convert_market_cap_to_float)
+        
+        # 2. Ensure '% Change' is a float (it should be, but good to check)
+        losers_df['% Change'] = pd.to_numeric(losers_df['% Change'], errors='coerce')
+
+        # 3. Apply the filters
+        min_market_cap = 100_000_000  # 100M USD
+        min_drop_pct = -20.0          # -20%
+        
+        filtered_losers = losers_df[
+            (losers_df['Market Cap Float'] > min_market_cap) &
+            (losers_df['% Change'] <= min_drop_pct)
+        ]
+        
+        # Sort by most dropped
+        filtered_losers = filtered_losers.sort_values(by='% Change', ascending=True)
+        
+        print(f"Found {len(filtered_losers)} general market losers matching criteria.")
+        return filtered_losers.to_dict('records') # Convert DataFrame to list of dicts
+        
+    except Exception as e:
+        print(f"Error in get_general_market_losers: {e}")
+        traceback.print_exc()
+        return []
+
+def generate_html_report(portfolio_details, general_market_losers):
     """ Generates a complete HTML report string. """
     today = datetime.now().strftime("%B %d, %Y")
     
@@ -67,9 +137,10 @@ def generate_html_report(portfolio_details):
     <body>
         <h1>Daily Stock Report - {today}</h1>
 
+    <!-- --- Personal Alerts Section --- -->
     """
     
-    # --- Alerts Section ---
+    # --- Personal Alerts Section ---
     total_drops = [s for s in portfolio_details if s['total_change_pct'] <= -30]
     daily_drops_10 = [s for s in portfolio_details if s['daily_change_pct'] <= -10]
     daily_drops_20 = [s for s in portfolio_details if s['daily_change_pct'] <= -20]
@@ -77,7 +148,7 @@ def generate_html_report(portfolio_details):
 
     # --- Significant Daily Movers (Gains) ---
     if daily_gains_20:
-        html += "<div class='info-section'><h2>🚀 Significant Daily Movers (Up)</h2>"
+        html += "<div class='info-section'><h2>🚀 My Portfolio Movers (Up)</h2>"
         html += "<h3 style='color:green;'>Stocks Up More Than 20% Today</h3><table>"
         html += "<tr><th>Stock</th><th>Daily Change</th></tr>"
         for s in daily_gains_20:
@@ -86,7 +157,7 @@ def generate_html_report(portfolio_details):
 
     # --- Significant Daily Movers & Alerts (Drops) ---
     if total_drops or daily_drops_10 or daily_drops_20:
-        html += "<div class='alert-section'><h2>🔻 Portfolio Alerts & Significant Drops</h2>"
+        html += "<div class='alert-section'><h2>🔻 My Portfolio Alerts & Drops</h2>"
         
         if total_drops:
             html += "<h3 style='color:#d9534f;'>TOTAL DROP Over 30%</h3><table>"
@@ -111,7 +182,27 @@ def generate_html_report(portfolio_details):
             
         html += "</div>"
     
-    # --- End of Moved Alerts Section ---
+    # --- NEW: General Market Scan Section ---
+    html += "<div class='info-section' style='background-color: #f5f5f5; border-color: #aaa;'>"
+    html += "<h2>🌎 General Market Scan - Losers (Cap >100M, Drop >20%)</h2>"
+    
+    if general_market_losers:
+        html += "<table><tr><th>Stock</th><th>Name</th><th>Daily Change</th><th>Market Cap</th></tr>"
+        for stock in general_market_losers:
+            html += f"""
+                <tr>
+                    <td>{stock['Symbol']}</td>
+                    <td>{stock['Name']}</td>
+                    <td class='negative'>{stock['% Change']:.2f}%</td>
+                    <td>{stock['Market Cap']}</td>
+                </tr>
+            """
+        html += "</table>"
+    else:
+        html += "<p>No stocks found matching the criteria (Market Cap > 100M and Daily Drop > 20%).</p>"
+    
+    html += "</div>"
+    # --- End of General Market Scan Section ---
 
     html += """
         <h2>My Portfolio Summary</h2>
@@ -157,7 +248,6 @@ def send_email(html_body):
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECIPIENT_EMAIL
     
-    # Attach the HTML part
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
@@ -190,7 +280,6 @@ def check_portfolio_and_report():
 
     print("Reading portfolio from Excel...")
     
-    # יצירת מפה של טיקרים ומחירי קנייה
     portfolio_map = {}
     for index, row in df.iterrows():
         ticker_symbol = str(row[TICKER_COLUMN]).strip()
@@ -210,17 +299,14 @@ def check_portfolio_and_report():
     tickers_list = list(portfolio_map.keys())
     print(f"Fetching data for {len(tickers_list)} tickers: {', '.join(tickers_list)}")
     
-    # הורדת כל הנתונים בבת אחת
     try:
         all_data = yf.download(tickers_list, period="5d", progress=False)
         if all_data.empty:
-            print("No data downloaded from yfinance.")
-            return
-            
-        # ודא שיש לנו מספיק נתונים
+            print("No data downloaded from yfinance for portfolio.")
+            # We can still proceed if we only want the general scan
+        
         if len(all_data) < 2:
-            print("Not enough historical data (less than 2 days) to calculate changes.")
-            return
+            print("Not enough historical data (less than 2 days) to calculate changes for portfolio.")
             
         close_prices = all_data['Close']
         latest_prices = close_prices.iloc[-1]
@@ -229,24 +315,21 @@ def check_portfolio_and_report():
     except Exception as e:
         print(f"Error downloading batch data from yfinance: {e}")
         traceback.print_exc()
-        return
-
-    # --- קבלת סקירת שוק (הוסר) ---
-    
+        # Don't return, we might still want the general scan
+        
     # --- עיבוד נתוני התיק ---
     portfolio_details = []
     
     for ticker, buy_price in portfolio_map.items():
         try:
-            # אם יש רק טיקר אחד, yfinance מחזיר מבנה נתונים שטוח
             if len(tickers_list) == 1:
                 current_price = latest_prices
                 prev_close = prev_prices
             else:
-                current_price = latest_prices[ticker]
-                prev_close = prev_prices[ticker]
+                current_price = latest_prices.get(ticker)
+                prev_close = prev_prices.get(ticker)
 
-            if pd.isna(current_price) or pd.isna(prev_close):
+            if current_price is None or prev_close is None or pd.isna(current_price) or pd.isna(prev_close):
                 print(f"Skipping {ticker}: Missing current or previous price data.")
                 continue
 
@@ -272,15 +355,19 @@ def check_portfolio_and_report():
             print(f"Error processing {ticker}: {e}")
             traceback.print_exc()
 
-    if not portfolio_details:
-        print("No portfolio details could be processed.")
+    # --- NEW: Get General Market Losers ---
+    general_market_losers = get_general_market_losers()
+    # --- End ---
+
+    if not portfolio_details and not general_market_losers:
+        print("No portfolio details or general market losers to report.")
         return
 
     # --- יצירה ושליחת הדוח ---
     print("\nGenerating HTML report...")
-    html_report = generate_html_report(portfolio_details)
+    # Pass the new data to the report generator
+    html_report = generate_html_report(portfolio_details, general_market_losers)
     
-    # שמירת קובץ HTML מקומי
     report_filename = "daily_stock_report.html"
     try:
         with open(report_filename, "w", encoding="utf-8") as f:
