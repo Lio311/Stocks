@@ -82,7 +82,7 @@ def check_portfolio():
             print(f"Checked {ticker_symbol}: Current={current_price:.2f}, Buy={buy_price:.2f}, Change={change_pct:.1f}%")
 
             # Check the alert condition (-10% drop)
-            if change_pct <= -10:
+            if change_pct <= -1:
                 alert_msg = (
                     f"--- Price Alert! ---\n"
                     f"Stock: {ticker_symbol}\n"
