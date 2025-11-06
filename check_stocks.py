@@ -38,28 +38,7 @@ def clean_price(price_str):
         print(f"Warning: Could not convert price string '{price_str}' to float.")
         return None
 
-def get_market_overview():
-    """ Fetches daily change for major market indices. """
-    print("Fetching market overview...")
-    index_symbols = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "Dow Jones": "^DJI"}
-    market_changes = {}
-
-    for name, ticker in index_symbols.items():
-        try:
-            data = yf.download(ticker, period="2d", progress=False)
-            if len(data) < 2:
-                market_changes[name] = 0.0
-                continue
-            
-            change = ((data['Close'].iloc[-1] - data['Close'].iloc[-2]) / data['Close'].iloc[-2]) * 100
-            market_changes[name] = round(change, 2)
-        except Exception as e:
-            print(f"Error fetching index {name} ({ticker}): {e}")
-            market_changes[name] = 0.0
-            
-    return market_changes
-
-def generate_html_report(market_changes, portfolio_details):
+def generate_html_report(portfolio_details):
     """ Generates a complete HTML report string. """
     today = datetime.now().strftime("%B %d, %Y")
     
@@ -88,47 +67,8 @@ def generate_html_report(market_changes, portfolio_details):
     <body>
         <h1>Daily Stock Report - {today}</h1>
 
-        <h2>Market Overview</h2>
-        <table>
-            <tr><th>Index</th><th>Daily Change (%)</th></tr>
     """
     
-    # --- Market Overview Table ---
-    for name, change in market_changes.items():
-        cls = "positive" if change > 0 else ("negative" if change < 0 else "neutral")
-        html += f"<tr><td>{name}</td><td class='{cls}'>{change:+.2f}%</td></tr>"
-
-    html += """
-        </table>
-
-        <h2>My Portfolio Summary</h2>
-        <table>
-            <tr>
-                <th>Stock</th>
-                <th>Buy Price</th>
-                <th>Current Price</th>
-                <th>Daily Change</th>
-                <th>Total Change</th>
-            </tr>
-    """
-
-    # --- Portfolio Summary Table ---
-    for stock in portfolio_details:
-        daily_cls = "positive" if stock['daily_change_pct'] > 0 else ("negative" if stock['daily_change_pct'] < 0 else "neutral")
-        total_cls = "positive" if stock['total_change_pct'] > 0 else ("negative" if stock['total_change_pct'] < 0 else "neutral")
-        
-        html += f"""
-            <tr>
-                <td>{stock['ticker']}</td>
-                <td>{stock['buy_price']:.2f}</td>
-                <td>{stock['current_price']:.2f}</td>
-                <td class='{daily_cls}'>{stock['daily_change_pct']:+.2f}%</td>
-                <td class='{total_cls}'>{stock['total_change_pct']:+.2f}%</td>
-            </tr>
-        """
-    
-    html += "</table>"
-
     # --- Alerts Section ---
     total_drops = [s for s in portfolio_details if s['total_change_pct'] <= -30]
     daily_drops_10 = [s for s in portfolio_details if s['daily_change_pct'] <= -10]
@@ -170,6 +110,37 @@ def generate_html_report(market_changes, portfolio_details):
             html += "</table>"
             
         html += "</div>"
+    
+    # --- End of Moved Alerts Section ---
+
+    html += """
+        <h2>My Portfolio Summary</h2>
+        <table>
+            <tr>
+                <th>Stock</th>
+                <th>Buy Price</th>
+                <th>Current Price</th>
+                <th>Daily Change</th>
+                <th>Total Change</th>
+            </tr>
+    """
+
+    # --- Portfolio Summary Table ---
+    for stock in portfolio_details:
+        daily_cls = "positive" if stock['daily_change_pct'] > 0 else ("negative" if stock['daily_change_pct'] < 0 else "neutral")
+        total_cls = "positive" if stock['total_change_pct'] > 0 else ("negative" if stock['total_change_pct'] < 0 else "neutral")
+        
+        html += f"""
+            <tr>
+                <td>{stock['ticker']}</td>
+                <td>{stock['buy_price']:.2f}</td>
+                <td>{stock['current_price']:.2f}</td>
+                <td class='{daily_cls}'>{stock['daily_change_pct']:+.2f}%</td>
+                <td class='{total_cls}'>{stock['total_change_pct']:+.2f}%</td>
+            </tr>
+        """
+    
+    html += "</table>"
 
     html += "</body></html>"
     return html
@@ -260,9 +231,8 @@ def check_portfolio_and_report():
         traceback.print_exc()
         return
 
-    # --- קבלת סקירת שוק ---
-    market_changes = get_market_overview()
-
+    # --- קבלת סקירת שוק (הוסר) ---
+    
     # --- עיבוד נתוני התיק ---
     portfolio_details = []
     
@@ -308,7 +278,7 @@ def check_portfolio_and_report():
 
     # --- יצירה ושליחת הדוח ---
     print("\nGenerating HTML report...")
-    html_report = generate_html_report(market_changes, portfolio_details)
+    html_report = generate_html_report(portfolio_details)
     
     # שמירת קובץ HTML מקומי
     report_filename = "daily_stock_report.html"
