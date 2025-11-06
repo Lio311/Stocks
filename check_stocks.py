@@ -7,7 +7,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import re
 from datetime import datetime
-import traceback # לניפוי שגיאות
+import traceback # For debugging
 
 # --- NEW IMPORT ---
 # This library helps us scan the market for losers
@@ -24,7 +24,7 @@ except ImportError:
 PORTFOLIO_FILE = 'תיק מניות.xlsx'
 TICKER_COLUMN = 'טיקר'
 BUY_PRICE_COLUMN = 'מחיר עלות'
-HEADER_ROW = 8 # שורה שבה מתחילים הנתונים (כותרות הן שורה 9)
+HEADER_ROW = 8 # The row where data starts (headers are row 9)
 # ----------------------
 
 # --- Email Configuration (Reads from Environment Variables) ---
@@ -85,22 +85,23 @@ def get_general_market_losers():
         # 1. Convert Market Cap string to a float number
         losers_df['Market Cap Float'] = losers_df['Market Cap'].apply(convert_market_cap_to_float)
         
-        # 2. Ensure '% Change' is a float (it should be, but good to check)
+        # 2. Ensure '% Change' is a float
         losers_df['% Change'] = pd.to_numeric(losers_df['% Change'], errors='coerce')
 
         # 3. Apply the filters
         min_market_cap = 100_000_000  # 100M USD
-        min_drop_pct = -10.0          # -20%
+        # UPDATED: Relaxed filter from -20% to -5%
+        min_drop_pct = -5.0          # -5%
         
         filtered_losers = losers_df[
             (losers_df['Market Cap Float'] > min_market_cap) &
             (losers_df['% Change'] <= min_drop_pct)
         ]
         
-        # Sort by most dropped
-        filtered_losers = filtered_losers.sort_values(by='% Change', ascending=True)
+        # Sort by most dropped and take the top 15
+        filtered_losers = filtered_losers.sort_values(by='% Change', ascending=True).head(15)
         
-        print(f"Found {len(filtered_losers)} general market losers matching criteria.")
+        print(f"Found {len(filtered_losers)} general market losers matching criteria (Cap > 100M, Drop > 5%).")
         return filtered_losers.to_dict('records') # Convert DataFrame to list of dicts
         
     except Exception as e:
@@ -137,7 +138,6 @@ def generate_html_report(portfolio_details, general_market_losers):
     <body>
         <h1>Daily Stock Report - {today}</h1>
 
-    <!-- --- Personal Alerts Section --- -->
     """
     
     # --- Personal Alerts Section ---
@@ -184,7 +184,8 @@ def generate_html_report(portfolio_details, general_market_losers):
     
     # --- NEW: General Market Scan Section ---
     html += "<div class='info-section' style='background-color: #f5f5f5; border-color: #aaa;'>"
-    html += "<h2>🌎 General Market Scan - Losers (Cap >100M, Drop >20%)</h2>"
+    # UPDATED: Title reflects the new 5% filter
+    html += "<h2>🌎 General Market Scan - Losers (Cap >100M, Drop >5%)</h2>"
     
     if general_market_losers:
         html += "<table><tr><th>Stock</th><th>Name</th><th>Daily Change</th><th>Market Cap</th></tr>"
@@ -199,7 +200,8 @@ def generate_html_report(portfolio_details, general_market_losers):
             """
         html += "</table>"
     else:
-        html += "<p>No stocks found matching the criteria (Market Cap > 100M and Daily Drop > 20%).</p>"
+        # UPDATED: Message reflects the new 5% filter
+        html += "<p>No stocks found matching the criteria (Market Cap > 100M and Daily Drop > 5%).</p>"
     
     html += "</div>"
     # --- End of General Market Scan Section ---
@@ -294,66 +296,63 @@ def check_portfolio_and_report():
     
     if not portfolio_map:
         print("No valid tickers found in portfolio file.")
-        return
-
+        # Do not return yet, user might just want the general scan
+    
     tickers_list = list(portfolio_map.keys())
-    print(f"Fetching data for {len(tickers_list)} tickers: {', '.join(tickers_list)}")
     
-    try:
-        all_data = yf.download(tickers_list, period="5d", progress=False)
-        if all_data.empty:
-            print("No data downloaded from yfinance for portfolio.")
-            # We can still proceed if we only want the general scan
-        
-        if len(all_data) < 2:
-            print("Not enough historical data (less than 2 days) to calculate changes for portfolio.")
-            
-        close_prices = all_data['Close']
-        latest_prices = close_prices.iloc[-1]
-        prev_prices = close_prices.iloc[-2]
-
-    except Exception as e:
-        print(f"Error downloading batch data from yfinance: {e}")
-        traceback.print_exc()
-        # Don't return, we might still want the general scan
-        
-    # --- עיבוד נתוני התיק ---
+    # --- Portfolio Data Processing ---
     portfolio_details = []
-    
-    for ticker, buy_price in portfolio_map.items():
+    if tickers_list:
+        print(f"Fetching data for {len(tickers_list)} tickers: {', '.join(tickers_list)}")
         try:
-            if len(tickers_list) == 1:
-                current_price = latest_prices
-                prev_close = prev_prices
+            all_data = yf.download(tickers_list, period="5d", progress=False)
+            if all_data.empty or len(all_data) < 2:
+                print("Could not download sufficient portfolio data from yfinance.")
             else:
-                current_price = latest_prices.get(ticker)
-                prev_close = prev_prices.get(ticker)
+                close_prices = all_data['Close']
+                latest_prices = close_prices.iloc[-1]
+                prev_prices = close_prices.iloc[-2]
 
-            if current_price is None or prev_close is None or pd.isna(current_price) or pd.isna(prev_close):
-                print(f"Skipping {ticker}: Missing current or previous price data.")
-                continue
+                for ticker, buy_price in portfolio_map.items():
+                    try:
+                        if len(tickers_list) == 1:
+                            current_price = latest_prices
+                            prev_close = prev_prices
+                        else:
+                            current_price = latest_prices.get(ticker)
+                            prev_close = prev_prices.get(ticker)
 
-            total_change_pct = ((current_price - buy_price) / buy_price) * 100
-            daily_change_pct = ((current_price - prev_close) / prev_close) * 100
+                        if current_price is None or prev_close is None or pd.isna(current_price) or pd.isna(prev_close):
+                            print(f"Skipping {ticker}: Missing current or previous price data.")
+                            continue
 
-            details = {
-                "ticker": ticker,
-                "buy_price": buy_price,
-                "current_price": current_price,
-                "prev_close": prev_close,
-                "daily_change_pct": daily_change_pct,
-                "total_change_pct": total_change_pct
-            }
-            portfolio_details.append(details)
-            
-            print(f"{ticker}: Buy={buy_price:.2f}, Current={current_price:.2f}, "
-                  f"Daily={daily_change_pct:+.1f}%, Total={total_change_pct:+.1f}%")
+                        total_change_pct = ((current_price - buy_price) / buy_price) * 100
+                        daily_change_pct = ((current_price - prev_close) / prev_close) * 100
 
-        except KeyError:
-             print(f"Warning: No data found for ticker '{ticker}' in downloaded batch. It might be delisted or invalid.")
+                        details = {
+                            "ticker": ticker,
+                            "buy_price": buy_price,
+                            "current_price": current_price,
+                            "prev_close": prev_close,
+                            "daily_change_pct": daily_change_pct,
+                            "total_change_pct": total_change_pct
+                        }
+                        portfolio_details.append(details)
+                        
+                        print(f"{ticker}: Buy={buy_price:.2f}, Current={current_price:.2f}, "
+                              f"Daily={daily_change_pct:+.1f}%, Total={total_change_pct:+.1f}%")
+
+                    except KeyError:
+                         print(f"Warning: No data found for ticker '{ticker}' in downloaded batch. It might be delisted or invalid.")
+                    except Exception as e:
+                        print(f"Error processing {ticker}: {e}")
+                        traceback.print_exc()
+
         except Exception as e:
-            print(f"Error processing {ticker}: {e}")
+            print(f"Error downloading batch data from yfinance: {e}")
             traceback.print_exc()
+    else:
+        print("No tickers in portfolio file. Skipping portfolio processing.")
 
     # --- NEW: Get General Market Losers ---
     general_market_losers = get_general_market_losers()
@@ -363,7 +362,7 @@ def check_portfolio_and_report():
         print("No portfolio details or general market losers to report.")
         return
 
-    # --- יצירה ושליחת הדוח ---
+    # --- Report Generation and Sending ---
     print("\nGenerating HTML report...")
     # Pass the new data to the report generator
     html_report = generate_html_report(portfolio_details, general_market_losers)
@@ -376,10 +375,10 @@ def check_portfolio_and_report():
     except Exception as e:
         print(f"Error saving HTML file: {e}")
 
-    # שליחת אימייל
+    # Send Email
     if SENDER_EMAIL and RECIPIENT_EMAIL:
         print("Sending email...")
-        send_email(html_report)
+        send_email(html_body)
     else:
         print("\nEmail credentials not set. Skipping email send.")
         print("View your report at: daily_stock_report.html")
