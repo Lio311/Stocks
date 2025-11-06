@@ -298,7 +298,7 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
         html += "</table></div>"
     
     # --- General Market Losers Section ---
-    html += "<div class='info-section' style='background-color: #f5f5f5; border-color: #aaa;'>"
+    html += "<div class='alert-section'>"
     html += "<h2>📉 General Market Scan - Top Losers (Cap >100M, Drop >5%)</h2>"
     
     if general_market_losers:
