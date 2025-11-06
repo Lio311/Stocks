@@ -8,6 +8,8 @@ from email.mime.multipart import MIMEMultipart
 import re
 from datetime import datetime
 import traceback
+import requests # <-- נוסף עבור Gemini
+import json     # <-- נוסף עבור Gemini
 
 # --- Configuration ---
 PORTFOLIO_FILE = 'תיק מניות.xlsx'
@@ -20,6 +22,8 @@ HEADER_ROW = 8  # The row where data starts (headers are row 9)
 SENDER_EMAIL = os.environ.get('GMAIL_USER')
 SENDER_PASSWORD = os.environ.get('GMAIL_PASSWORD')
 RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL')
+# --- NEW: Gemini API Key ---
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 # ----------------------
 
 def clean_price(price_str):
@@ -205,7 +209,77 @@ def get_general_market_movers():
         traceback.print_exc()
         return [], []
 
-def generate_html_report(portfolio_details, general_market_losers, general_market_gainers):
+# --- NEW FUNCTION: GET GEMINI ANALYSIS ---
+def get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers):
+    """
+    Sends portfolio data to Gemini API for analysis and returns an HTML-formatted summary.
+    """
+    print("Getting Gemini analysis...")
+    
+    if not GEMINI_API_KEY:
+        print("Gemini API key not found. Skipping AI analysis.")
+        return "<p><i>(AI analysis is not configured. Please add a GEMINI_API_KEY secret.)</i></p>"
+
+    # 1. Create the prompt
+    prompt_data = "Here is my portfolio data:\n"
+    for item in portfolio_details:
+        prompt_data += f"- {item['ticker']}: Total Change: {item['total_change_pct']:.1f}%, Daily Change: {item['daily_change_pct']:.1f}%\n"
+    
+    prompt_data += "\nHere are today's top market gainers (Cap > 100M, Up > 5%):\n"
+    for item in general_market_gainers:
+        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}%\n"
+
+    prompt_data += "\nHere are today's top market losers (Cap > 100M, Drop > 5%):\n"
+    for item in general_market_losers:
+        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}%\n"
+
+    system_instruction = (
+        "You are a financial analyst. Your task is to provide a brief, high-level summary of the provided data. "
+        "**Do not give any financial advice, recommendations, or price predictions.** "
+        "Just summarize the key facts. "
+        "Start with a 1-2 sentence summary of the portfolio's main movements (e.g., specific stocks with big gains/losses). "
+        "Then, add a 1-sentence comment on the general market gainers and losers scan. "
+        "Keep the entire response to 3-4 sentences total."
+    )
+
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt_data}]
+        }],
+        "systemInstruction": {
+            "parts": [{"text": system_instruction}]
+        }
+    }
+
+    try:
+        response = requests.post(api_url, headers={"Content-Type": "application/json"}, data=json.dumps(payload), timeout=20)
+        response.raise_for_status() # Will raise an error for bad status codes
+        
+        result = response.json()
+        
+        if 'candidates' in result and result['candidates']:
+            text = result['candidates'][0]['content']['parts'][0]['text']
+            # Format as HTML with disclaimer
+            html_output = f"<p>{text.replace('\n', '<br>')}</p>"
+            html_output += "<p><small><i><b>Disclaimer:</b> This AI-generated summary is for informational purposes only and is not financial advice.</i></small></p>"
+            return html_output
+        else:
+            print("Gemini API returned no candidates.")
+            return "<p><i>(AI analysis returned no response.)</i></p>"
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error calling Gemini API: {e}")
+        return f"<p><i>(Error fetching AI analysis: {e})</i></p>"
+    except Exception as e:
+        print(f"Error processing Gemini response: {e}")
+        traceback.print_exc()
+        return "<p><i>(Error processing AI analysis.)</i></p>"
+
+
+# --- UPDATED FUNCTION: generate_html_report ---
+def generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html):
     """ Generates a complete HTML report string. """
     today = datetime.now().strftime("%B %d, %Y")
     
@@ -228,6 +302,12 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
             .alert-section {{ background-color: #fff0f0; border: 2px solid #d9534f; padding: 15px; border-radius: 8px; margin-top: 20px; }}
             .info-section {{ background-color: #f0f8ff; border: 2px solid #4a90e2; padding: 15px; border-radius: 8px; margin-top: 20px; }}
             .success-section {{ background-color: #f0fff4; border: 2px solid #48bb78; padding: 15px; border-radius: 8px; margin-top: 20px; }}
+            
+            /* NEW: Gemini Section Style */
+            .gemini-section {{ background-color: #fdf8e2; border: 2px solid #f0b90b; padding: 15px; border-radius: 8px; margin-top: 20px; }}
+            .gemini-section h2 {{ margin-top: 0; color: #d98c00; }}
+            .gemini-section p {{ font-size: 1.1em; line-height: 1.6; }}
+
             .alert-section h2 {{ margin-top: 0; color: #d9534f; }}
             .info-section h2 {{ margin-top: 0; color: #4a90e2; }}
             .success-section h2 {{ margin-top: 0; color: #48bb78; }}
@@ -235,6 +315,12 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
     </head>
     <body>
         <h1>Daily Stock Report - {today}</h1>
+
+    <!-- --- NEW: Gemini Analysis Section --- -->
+    <div class='gemini-section'>
+        <h2>🤖 AI Financial Summary</h2>
+        {gemini_analysis_html}
+    </div>
 
     <!-- --- Personal Alerts Section --- -->
     """
@@ -358,7 +444,8 @@ def send_email(html_body):
 
     today = datetime.now().strftime("%Y-%m-%d")
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"📈 Daily Stock Report - {today}"
+    # --- UPDATED SUBJECT ---
+    msg["Subject"] = f"📈 Daily Stock Report (with AI Summary) - {today}"
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECIPIENT_EMAIL
     
@@ -469,13 +556,19 @@ def check_portfolio_and_report():
     # --- Get General Market Movers (both losers and gainers) ---
     general_market_losers, general_market_gainers = get_general_market_movers()
 
+    # --- NEW: Get Gemini Analysis ---
+    # קורא לפונקציה החדשה עם כל הנתונים שאספנו
+    gemini_analysis_html = get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers)
+    # --- End ---
+
     if not portfolio_details and not general_market_losers and not general_market_gainers:
         print("No portfolio details or general market movers to report.")
         return
 
     # --- Report Generation and Sending ---
     print("\nGenerating HTML report...")
-    html_report = generate_html_report(portfolio_details, general_market_losers, general_market_gainers)
+    # מעביר את הסיכום של ג'מיני לפונקציית בניית הדו"ח
+    html_report = generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html)
     
     report_filename = "daily_stock_report.html"
     try:
