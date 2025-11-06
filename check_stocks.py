@@ -259,9 +259,9 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
         
         result = response.json()
         
-if 'candidates' in result and result['candidates']:
+        if 'candidates' in result and result['candidates']:
             text = result['candidates'][0]['content']['parts'][0]['text']
-            # Format as HTML with disclaimer
+            
             # FIX: Perform the replace operation *before* the f-string
             formatted_text = text.replace('\n', '<br>')
             html_output = f"<p>{formatted_text}</p>"
