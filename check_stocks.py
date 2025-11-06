@@ -75,39 +75,82 @@ def convert_market_cap_to_float(cap_str):
     except ValueError:
         return 0.0
 
+
 def get_general_market_losers():
-    """ NEW: Scans Yahoo Finance for top losers and filters them. """
-    print("\nScanning general market for big losers...")
+    """ NEW: Scans a predefined list of major stocks for big losers. """
+    print("\nScanning market for big losers...")
+    
+    # List of major stocks to monitor (you can expand this list)
+    watch_list = [
+        # Tech Giants
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'AMD', 'INTC', 'ORCL',
+        # Finance
+        'JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'BLK', 'SCHW',
+        # Healthcare
+        'JNJ', 'UNH', 'PFE', 'ABBV', 'TMO', 'ABT', 'MRK', 'LLY',
+        # Retail & Consumer
+        'WMT', 'HD', 'MCD', 'NKE', 'SBUX', 'TGT', 'COST',
+        # Energy
+        'XOM', 'CVX', 'COP', 'SLB', 'EOG',
+        # Industrial
+        'BA', 'CAT', 'GE', 'MMM', 'HON', 'LMT', 'RTX',
+        # Communication
+        'DIS', 'CMCSA', 'NFLX', 'T', 'VZ',
+        # Crypto-related
+        'COIN', 'MSTR', 'RIOT', 'MARA',
+        # AI & Software
+        'CRM', 'ADBE', 'NOW', 'SNOW', 'PLTR', 'DDOG'
+    ]
+    
     try:
-        # Get the day's top losers from Yahoo's screener
-        losers_df = si.get_day_losers()
+        print(f"Fetching data for {len(watch_list)} stocks...")
+        data = yf.download(watch_list, period="2d", progress=False, auto_adjust=False)
         
-        if losers_df.empty:
-            print("Could not fetch general market losers.")
+        if data.empty or len(data) < 2:
+            print("Could not download sufficient market data.")
             return []
-
-        # Clean and filter data
-        # 1. Convert Market Cap string to a float number
-        losers_df['Market Cap Float'] = losers_df['Market Cap'].apply(convert_market_cap_to_float)
         
-        # 2. Ensure '% Change' is a float
-        losers_df['% Change'] = pd.to_numeric(losers_df['% Change'], errors='coerce')
-
-        # 3. Apply the filters
-        min_market_cap = 100_000_000  # 100M USD
-        # UPDATED: Relaxed filter from -20% to -5%
-        min_drop_pct = -5.0          # -5%
+        close_prices = data['Close']
+        latest_prices = close_prices.iloc[-1]
+        prev_prices = close_prices.iloc[-2]
         
-        filtered_losers = losers_df[
-            (losers_df['Market Cap Float'] > min_market_cap) &
-            (losers_df['% Change'] <= min_drop_pct)
-        ]
+        losers = []
+        for ticker in watch_list:
+            try:
+                current = latest_prices[ticker] if len(watch_list) > 1 else latest_prices
+                previous = prev_prices[ticker] if len(watch_list) > 1 else prev_prices
+                
+                if pd.isna(current) or pd.isna(previous):
+                    continue
+                
+                pct_change = ((current - previous) / previous) * 100
+                
+                # Filter: Drop more than 5%
+                if pct_change <= -5.0:
+                    # Get market cap
+                    try:
+                        stock_info = yf.Ticker(ticker).info
+                        market_cap = stock_info.get('marketCap', 0)
+                        
+                        # Filter: Market cap over 100M
+                        if market_cap > 100_000_000:
+                            losers.append({
+                                'Symbol': ticker,
+                                'Name': stock_info.get('shortName', ticker),
+                                '% Change': pct_change,
+                                'Market Cap': f"${market_cap/1e9:.1f}B" if market_cap > 1e9 else f"${market_cap/1e6:.0f}M"
+                            })
+                    except:
+                        pass
+            except Exception as e:
+                print(f"Error processing {ticker}: {e}")
+                continue
         
-        # Sort by most dropped and take the top 15
-        filtered_losers = filtered_losers.sort_values(by='% Change', ascending=True).head(15)
+        # Sort by worst performers and take top 15
+        losers_sorted = sorted(losers, key=lambda x: x['% Change'])[:15]
         
-        print(f"Found {len(filtered_losers)} general market losers matching criteria (Cap > 100M, Drop > 5%).")
-        return filtered_losers.to_dict('records') # Convert DataFrame to list of dicts
+        print(f"Found {len(losers_sorted)} stocks matching criteria (Cap > 100M, Drop > 5%).")
+        return losers_sorted
         
     except Exception as e:
         print(f"Error in get_general_market_losers: {e}")
