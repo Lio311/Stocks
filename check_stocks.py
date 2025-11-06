@@ -19,6 +19,10 @@ except ImportError:
     print("Error: 'yahoo_fin' library not found.")
     print("Please install it by running: pip install yahoo_fin")
     exit()
+except Exception as e:
+    # This might catch the requests_html import error indirectly
+    print(f"Error importing yahoo_fin, make sure all dependencies are installed (pip install yahoo_fin requests_html): {e}")
+    exit()
 # -----------------
 
 # --- Configuration ---
@@ -307,14 +311,15 @@ def check_portfolio_and_report():
     if tickers_list:
         print(f"Fetching data for {len(tickers_list)} tickers: {', '.join(tickers_list)}")
         try:
-            # FIX: Add auto_adjust=True to silence warning, or keep as is.
-            # The warning is fine, but let's silence it.
-            all_data = yf.download(tickers_list, period="5d", progress=False, auto_adjust=True)
+            # --- FIX: Simplified and corrected yf.download call ---
+            # Call only ONCE, with auto_adjust=False.
+            # This is correct for comparing unadjusted buy prices and silences the warning.
+            all_data = yf.download(tickers_list, period="5d", progress=False, auto_adjust=False)
             
             if all_data.empty or len(all_data) < 2:
                 print("Could not download sufficient portfolio data from yfinance.")
             else:
-                # auto_adjust=True means we only get 'Close'
+                # auto_adjust=False gives a multi-level dataframe
                 close_prices = all_data['Close']
                 latest_prices = close_prices.iloc[-1]
                 prev_prices = close_prices.iloc[-2]
@@ -322,6 +327,7 @@ def check_portfolio_and_report():
                 for ticker, buy_price in portfolio_map.items():
                     try:
                         if len(tickers_list) == 1:
+                            # Special case if only one ticker, dataframe structure is different
                             current_price = latest_prices
                             prev_close = prev_prices
                         else:
@@ -331,26 +337,6 @@ def check_portfolio_and_report():
                         if current_price is None or prev_close is None or pd.isna(current_price) or pd.isna(prev_close):
                             print(f"Skipping {ticker}: Missing current or previous price data.")
                             continue
-
-                        # We need to get the "unadjusted" buy price to compare
-                        # This is tricky. Let's revert auto_adjust
-                        # Reverting auto_adjust=False (default)
-                        all_data = yf.download(tickers_list, period="5d", progress=False)
-                        close_prices = all_data['Close']
-                        latest_prices = close_prices.iloc[-1]
-                        prev_prices = close_prices.iloc[-2]
-                        
-                        if len(tickers_list) == 1:
-                            current_price = latest_prices
-                            prev_close = prev_prices
-                        else:
-                            current_price = latest_prices.get(ticker)
-                            prev_close = prev_prices.get(ticker)
-
-                        if current_price is None or prev_close is None or pd.isna(current_price) or pd.isna(prev_close):
-                             print(f"Skipping {ticker}: Missing current or previous price data (re-check).")
-                             continue
-
 
                         total_change_pct = ((current_price - buy_price) / buy_price) * 100
                         daily_change_pct = ((current_price - prev_close) / prev_close) * 100
