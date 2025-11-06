@@ -12,6 +12,7 @@ import traceback # For debugging
 # --- NEW IMPORT ---
 # This library helps us scan the market for losers
 # Make sure to install it: pip install yahoo_fin
+# AND a hidden dependency: pip install requests_html
 try:
     from yahoo_fin import stock_info as si
 except ImportError:
@@ -138,6 +139,7 @@ def generate_html_report(portfolio_details, general_market_losers):
     <body>
         <h1>Daily Stock Report - {today}</h1>
 
+    <!-- --- Personal Alerts Section --- -->
     """
     
     # --- Personal Alerts Section ---
@@ -305,10 +307,14 @@ def check_portfolio_and_report():
     if tickers_list:
         print(f"Fetching data for {len(tickers_list)} tickers: {', '.join(tickers_list)}")
         try:
-            all_data = yf.download(tickers_list, period="5d", progress=False)
+            # FIX: Add auto_adjust=True to silence warning, or keep as is.
+            # The warning is fine, but let's silence it.
+            all_data = yf.download(tickers_list, period="5d", progress=False, auto_adjust=True)
+            
             if all_data.empty or len(all_data) < 2:
                 print("Could not download sufficient portfolio data from yfinance.")
             else:
+                # auto_adjust=True means we only get 'Close'
                 close_prices = all_data['Close']
                 latest_prices = close_prices.iloc[-1]
                 prev_prices = close_prices.iloc[-2]
@@ -325,6 +331,26 @@ def check_portfolio_and_report():
                         if current_price is None or prev_close is None or pd.isna(current_price) or pd.isna(prev_close):
                             print(f"Skipping {ticker}: Missing current or previous price data.")
                             continue
+
+                        # We need to get the "unadjusted" buy price to compare
+                        # This is tricky. Let's revert auto_adjust
+                        # Reverting auto_adjust=False (default)
+                        all_data = yf.download(tickers_list, period="5d", progress=False)
+                        close_prices = all_data['Close']
+                        latest_prices = close_prices.iloc[-1]
+                        prev_prices = close_prices.iloc[-2]
+                        
+                        if len(tickers_list) == 1:
+                            current_price = latest_prices
+                            prev_close = prev_prices
+                        else:
+                            current_price = latest_prices.get(ticker)
+                            prev_close = prev_prices.get(ticker)
+
+                        if current_price is None or prev_close is None or pd.isna(current_price) or pd.isna(prev_close):
+                             print(f"Skipping {ticker}: Missing current or previous price data (re-check).")
+                             continue
+
 
                         total_change_pct = ((current_price - buy_price) / buy_price) * 100
                         daily_change_pct = ((current_price - prev_close) / prev_close) * 100
@@ -378,7 +404,8 @@ def check_portfolio_and_report():
     # Send Email
     if SENDER_EMAIL and RECIPIENT_EMAIL:
         print("Sending email...")
-        send_email(html_body)
+        # THE FIX IS HERE: Make sure this variable 'html_report' matches the one above
+        send_email(html_report)
     else:
         print("\nEmail credentials not set. Skipping email send.")
         print("View your report at: daily_stock_report.html")
