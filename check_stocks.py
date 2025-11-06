@@ -7,48 +7,33 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import re
 
-# --- Configuration: Update these to match your file ---
-# This must be the exact name of the file you upload to GitHub
-PORTFOLIO_FILE = 'תיק מניות.xlsx' 
-# This is the name of your Ticker/Symbol column
+# --- Configuration ---
+PORTFOLIO_FILE = 'תיק מניות.xlsx'
 TICKER_COLUMN = 'טיקר'
-# This is the name of your Buy Price (Cost Price) column
 BUY_PRICE_COLUMN = 'מחיר עלות'
-# ----------------------------------------------------
+# ----------------------
 
-# --- Do Not Touch: Email details will be taken from GitHub Secrets ---
 SENDER_EMAIL = os.environ.get('GMAIL_USER')
 SENDER_PASSWORD = os.environ.get('GMAIL_PASSWORD')
 RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL')
-# ------------------------------------------------------------------
+
 
 def clean_price(price_str):
-    """Cleans a price string, removing currency symbols and commas."""
     if isinstance(price_str, (int, float)):
         return float(price_str)
-    # Remove any non-numeric characters except for the decimal point
     cleaned_str = re.sub(r"[^0-9.]", "", str(price_str))
-    if cleaned_str:
-        return float(cleaned_str)
-    return None
+    return float(cleaned_str) if cleaned_str else None
+
 
 def check_portfolio():
     try:
-        # Read the CSV file. We try 'utf-8' first, then 'utf-8-sig'
-        # which is common for CSVs exported from Excel with Hebrew.
-        portfolio = pd.read_csv(PORTFOLIO_FILE, encoding='utf-8')
-    except UnicodeDecodeError:
-        print("UTF-8 failed, trying 'utf-8-sig'...")
-        try:
-            portfolio = pd.read_csv(PORTFOLIO_FILE, encoding='utf-8-sig')
-        except Exception as e:
-            print(f"Error reading CSV file with all encodings: {e}")
-            return
+        # השתמש בקריאה המתאימה לקובץ Excel
+        portfolio = pd.read_excel(PORTFOLIO_FILE)
     except FileNotFoundError:
         print(f"Error: Could not find file {PORTFOLIO_FILE}")
         return
     except Exception as e:
-        print(f"Error reading CSV file: {e}")
+        print(f"Error reading Excel file: {e}")
         return
 
     alerts = []
@@ -59,19 +44,16 @@ def check_portfolio():
             ticker_symbol = str(row[TICKER_COLUMN]).strip()
             buy_price_raw = row[BUY_PRICE_COLUMN]
 
-            # Skip rows with missing critical data
-            if pd.isna(ticker_symbol) or ticker_symbol == "nan" or ticker_symbol == "" or pd.isna(buy_price_raw):
+            if not ticker_symbol or pd.isna(buy_price_raw):
                 print(f"Skipping row {index+1}: missing Ticker or Buy Price")
                 continue
 
             buy_price = clean_price(buy_price_raw)
-            if buy_price is None or buy_price == 0:
+            if not buy_price:
                 print(f"Skipping {ticker_symbol}: Invalid Buy Price ({buy_price_raw})")
                 continue
 
-            # Fetch current market data
             data = yf.Ticker(ticker_symbol).history(period='1d')
-            
             if data.empty:
                 print(f"Could not find data for {ticker_symbol}")
                 continue
@@ -81,16 +63,14 @@ def check_portfolio():
 
             print(f"Checked {ticker_symbol}: Current={current_price:.2f}, Buy={buy_price:.2f}, Change={change_pct:.1f}%")
 
-            # Check the alert condition (-10% drop)
-            if change_pct <= -1:
-                alert_msg = (
+            if change_pct <= -20:  # שינוי ל־20% ירידה
+                alerts.append(
                     f"--- Price Alert! ---\n"
                     f"Stock: {ticker_symbol}\n"
                     f"Buy Price: {buy_price:.2f}\n"
                     f"Current Price: {current_price:.2f}\n"
                     f"Change: {change_pct:.1f}%\n"
                 )
-                alerts.append(alert_msg)
 
         except Exception as e:
             print(f"Error processing {ticker_symbol} (Row {index+1}): {e}")
@@ -101,20 +81,17 @@ def check_portfolio():
     else:
         print("\nNo stocks triggered alerts. All good!")
 
+
 def send_email(alerts):
     if not SENDER_EMAIL or not SENDER_PASSWORD or not RECIPIENT_EMAIL:
-        print("Error: Email credentials not set in environment variables (GitHub Secrets).")
+        print("Error: Email credentials not set in environment variables.")
         return
 
     message_body = "\n".join(alerts)
-    
     msg = MIMEMultipart()
-    # Email Subject in English
     msg["Subject"] = "🔔 Stock Portfolio Alert"
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECIPIENT_EMAIL
-    
-    # Attach the body with UTF-8 encoding (to support Hebrew ticker names in the email)
     msg.attach(MIMEText(message_body, "plain", "utf-8"))
 
     try:
@@ -125,6 +102,7 @@ def send_email(alerts):
             print("Alerts email sent successfully!")
     except Exception as e:
         print(f"Error sending email: {e}")
+
 
 if __name__ == "__main__":
     check_portfolio()
