@@ -22,14 +22,16 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          # --- התיקון ---
-          # הוספנו התקנה מפורשת של החבילה החסרה
-          # הלוג הראה שהיא לא הותקנה על ידי הקובץ הראשי
-          pip install requests_html
+          # מתקין את הספריות הנדרשות עבור Gemini וקריאת ויקיפדיה
+          pip install requests lxml
 
       - name: Run stock check script
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          # מושך את המפתח של ג'מיני שהוספת ל-Secrets
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        
+        # מריץ את קובץ הפייתון הראשי שלך
         run: python check_stocks.py
