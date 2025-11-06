@@ -33,18 +33,18 @@ def check_portfolio():
         print(f"Error reading Excel file: {e}")
         return
 
-    # הסרת רווחים ותווים נסתרים משמות העמודות
     df.columns = [str(c).strip() for c in df.columns]
 
-    # בדיקת עמודות נדרשות
     required_cols = [TICKER_COLUMN, BUY_PRICE_COLUMN]
     for col in required_cols:
         if col not in df.columns:
             print(f"Error: Missing column '{col}'. Found columns: {list(df.columns)}")
             return
 
-    alerts = []
     print("Checking portfolio...")
+
+    total_drop_alerts = []
+    daily_drop_alerts = []
 
     for index, row in df.iterrows():
         ticker_symbol = None
@@ -53,49 +53,67 @@ def check_portfolio():
             buy_price_raw = row[BUY_PRICE_COLUMN]
 
             if not ticker_symbol or pd.isna(buy_price_raw):
-                print(f"Skipping row {index+1}: missing data")
                 continue
 
             buy_price = clean_price(buy_price_raw)
             if not buy_price:
-                print(f"Skipping {ticker_symbol}: invalid buy price ({buy_price_raw})")
                 continue
 
-            data = yf.Ticker(ticker_symbol).history(period='1d')
+            data = yf.Ticker(ticker_symbol).history(period='5d')  # 5 ימים למקרה שאין מסחר היום
             if data.empty:
-                print(f"Could not fetch data for {ticker_symbol}")
+                print(f"No data for {ticker_symbol}")
                 continue
 
             current_price = data['Close'].iloc[-1]
-            change_pct = ((current_price - buy_price) / buy_price) * 100
-            print(f"{ticker_symbol}: Current={current_price:.2f}, Buy={buy_price:.2f}, Change={change_pct:.1f}%")
+            prev_close = data['Close'].iloc[-2] if len(data) > 1 else current_price
 
-            if change_pct <= -20:
-                alerts.append(
-                    f"--- Price Alert! ---\n"
+            total_change_pct = ((current_price - buy_price) / buy_price) * 100
+            daily_change_pct = ((current_price - prev_close) / prev_close) * 100
+
+            print(f"{ticker_symbol}: Total={total_change_pct:.1f}%, Daily={daily_change_pct:.1f}%")
+
+            # ירידה כוללת מעל 30%
+            if total_change_pct <= -30:
+                total_drop_alerts.append(
+                    f"🔻 TOTAL DROP ALERT\n"
                     f"Stock: {ticker_symbol}\n"
                     f"Buy Price: {buy_price:.2f}\n"
-                    f"Current Price: {current_price:.2f}\n"
-                    f"Change: {change_pct:.1f}%\n"
+                    f"Current: {current_price:.2f}\n"
+                    f"Change: {total_change_pct:.1f}%\n"
+                )
+
+            # ירידה יומית מעל 10%
+            if daily_change_pct <= -10:
+                daily_drop_alerts.append(
+                    f"⚠️ DAILY DROP ALERT\n"
+                    f"Stock: {ticker_symbol}\n"
+                    f"Yesterday Close: {prev_close:.2f}\n"
+                    f"Current: {current_price:.2f}\n"
+                    f"Change Today: {daily_change_pct:.1f}%\n"
                 )
 
         except Exception as e:
             print(f"Error processing row {index+1}: {e}")
 
-    if alerts:
-        print("\nFound alerts, sending email...")
-        send_email(alerts)
-    else:
-        print("\nNo stocks triggered alerts.")
+    if total_drop_alerts or daily_drop_alerts:
+        body = ""
+        if total_drop_alerts:
+            body += "=== TOTAL DROP OVER 30% ===\n" + "\n".join(total_drop_alerts) + "\n\n"
+        if daily_drop_alerts:
+            body += "=== DAILY DROP OVER 10% ===\n" + "\n".join(daily_drop_alerts)
 
-def send_email(alerts):
+        print("\nSending alerts email...")
+        send_email(body)
+    else:
+        print("\nNo alerts triggered today.")
+
+def send_email(body):
     if not SENDER_EMAIL or not SENDER_PASSWORD or not RECIPIENT_EMAIL:
         print("Error: Email credentials not set.")
         return
 
-    body = "\n".join(alerts)
     msg = MIMEMultipart()
-    msg["Subject"] = "🔔 Stock Portfolio Alert"
+    msg["Subject"] = "📉 Stock Alerts - Portfolio Monitor"
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECIPIENT_EMAIL
     msg.attach(MIMEText(body, "plain", "utf-8"))
