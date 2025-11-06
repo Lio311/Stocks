@@ -76,81 +76,131 @@ def convert_market_cap_to_float(cap_str):
         return 0.0
 
 
+def get_sp500_tickers():
+    """ Fetches the list of S&P 500 tickers from Wikipedia. """
+    try:
+        url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+        tables = pd.read_html(url)
+        sp500_table = tables[0]
+        tickers = sp500_table['Symbol'].tolist()
+        # Clean tickers (remove dots that Wikipedia uses)
+        tickers = [ticker.replace('.', '-') for ticker in tickers]
+        return tickers
+    except Exception as e:
+        print(f"Error fetching S&P 500 tickers: {e}")
+        return []
+
+def get_nasdaq100_tickers():
+    """ Fetches the list of NASDAQ-100 tickers from Wikipedia. """
+    try:
+        url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
+        tables = pd.read_html(url)
+        nasdaq_table = tables[4]  # The correct table index
+        tickers = nasdaq_table['Ticker'].tolist()
+        return tickers
+    except Exception as e:
+        print(f"Error fetching NASDAQ-100 tickers: {e}")
+        return []
+
 def get_general_market_losers():
-    """ NEW: Scans a predefined list of major stocks for big losers. """
+    """ Scans S&P 500 and NASDAQ-100 stocks for big losers. """
     print("\nScanning market for big losers...")
     
-    # List of major stocks to monitor (you can expand this list)
-    watch_list = [
-        # Tech Giants
-        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'AMD', 'INTC', 'ORCL',
-        # Finance
-        'JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'BLK', 'SCHW',
-        # Healthcare
-        'JNJ', 'UNH', 'PFE', 'ABBV', 'TMO', 'ABT', 'MRK', 'LLY',
-        # Retail & Consumer
-        'WMT', 'HD', 'MCD', 'NKE', 'SBUX', 'TGT', 'COST',
-        # Energy
-        'XOM', 'CVX', 'COP', 'SLB', 'EOG',
-        # Industrial
-        'BA', 'CAT', 'GE', 'MMM', 'HON', 'LMT', 'RTX',
-        # Communication
-        'DIS', 'CMCSA', 'NFLX', 'T', 'VZ',
-        # Crypto-related
-        'COIN', 'MSTR', 'RIOT', 'MARA',
-        # AI & Software
-        'CRM', 'ADBE', 'NOW', 'SNOW', 'PLTR', 'DDOG'
-    ]
+    # Get all major index tickers
+    print("Fetching S&P 500 tickers...")
+    sp500 = get_sp500_tickers()
+    print(f"Got {len(sp500)} S&P 500 tickers")
+    
+    print("Fetching NASDAQ-100 tickers...")
+    nasdaq100 = get_nasdaq100_tickers()
+    print(f"Got {len(nasdaq100)} NASDAQ-100 tickers")
+    
+    # Combine and remove duplicates
+    all_tickers = list(set(sp500 + nasdaq100))
+    print(f"Total unique tickers to scan: {len(all_tickers)}")
+    
+    if not all_tickers:
+        print("Could not fetch any tickers.")
+        return []
     
     try:
-        print(f"Fetching data for {len(watch_list)} stocks...")
-        data = yf.download(watch_list, period="2d", progress=False, auto_adjust=False)
+        # Download data in batches to avoid rate limits
+        batch_size = 100
+        all_losers = []
         
-        if data.empty or len(data) < 2:
-            print("Could not download sufficient market data.")
-            return []
-        
-        close_prices = data['Close']
-        latest_prices = close_prices.iloc[-1]
-        prev_prices = close_prices.iloc[-2]
-        
-        losers = []
-        for ticker in watch_list:
+        for i in range(0, len(all_tickers), batch_size):
+            batch = all_tickers[i:i+batch_size]
+            print(f"Processing batch {i//batch_size + 1}/{(len(all_tickers)-1)//batch_size + 1} ({len(batch)} tickers)...")
+            
             try:
-                current = latest_prices[ticker] if len(watch_list) > 1 else latest_prices
-                previous = prev_prices[ticker] if len(watch_list) > 1 else prev_prices
+                data = yf.download(batch, period="2d", progress=False, auto_adjust=False, threads=True)
                 
-                if pd.isna(current) or pd.isna(previous):
+                if data.empty or len(data) < 2:
                     continue
                 
-                pct_change = ((current - previous) / previous) * 100
+                close_prices = data['Close']
+                latest_prices = close_prices.iloc[-1]
+                prev_prices = close_prices.iloc[-2]
                 
-                # Filter: Drop more than 5%
-                if pct_change <= -5.0:
-                    # Get market cap
+                for ticker in batch:
                     try:
-                        stock_info = yf.Ticker(ticker).info
-                        market_cap = stock_info.get('marketCap', 0)
+                        if len(batch) == 1:
+                            current = latest_prices
+                            previous = prev_prices
+                        else:
+                            current = latest_prices.get(ticker)
+                            previous = prev_prices.get(ticker)
                         
-                        # Filter: Market cap over 100M
-                        if market_cap > 100_000_000:
-                            losers.append({
-                                'Symbol': ticker,
-                                'Name': stock_info.get('shortName', ticker),
-                                '% Change': pct_change,
-                                'Market Cap': f"${market_cap/1e9:.1f}B" if market_cap > 1e9 else f"${market_cap/1e6:.0f}M"
+                        if current is None or previous is None or pd.isna(current) or pd.isna(previous):
+                            continue
+                        
+                        pct_change = ((current - previous) / previous) * 100
+                        
+                        # Filter: Drop more than 5%
+                        if pct_change <= -5.0:
+                            all_losers.append({
+                                'ticker': ticker,
+                                'current': float(current),
+                                'previous': float(previous),
+                                'pct_change': float(pct_change)
                             })
-                    except:
-                        pass
+                    except Exception as e:
+                        continue
+                        
             except Exception as e:
-                print(f"Error processing {ticker}: {e}")
+                print(f"Error processing batch: {e}")
                 continue
         
-        # Sort by worst performers and take top 15
-        losers_sorted = sorted(losers, key=lambda x: x['% Change'])[:15]
+        if not all_losers:
+            print("No stocks found with drops over 5%.")
+            return []
         
-        print(f"Found {len(losers_sorted)} stocks matching criteria (Cap > 100M, Drop > 5%).")
-        return losers_sorted
+        # Now get market cap for filtered losers
+        print(f"\nFound {len(all_losers)} stocks down >5%. Fetching market cap data...")
+        final_losers = []
+        
+        for item in all_losers:
+            try:
+                ticker_obj = yf.Ticker(item['ticker'])
+                info = ticker_obj.info
+                market_cap = info.get('marketCap', 0)
+                
+                # Filter: Market cap over 100M
+                if market_cap > 100_000_000:
+                    final_losers.append({
+                        'Symbol': item['ticker'],
+                        'Name': info.get('shortName', item['ticker']),
+                        '% Change': item['pct_change'],
+                        'Market Cap': f"${market_cap/1e9:.1f}B" if market_cap > 1e9 else f"${market_cap/1e6:.0f}M"
+                    })
+            except Exception as e:
+                continue
+        
+        # Sort by worst performers and take top 20
+        final_losers_sorted = sorted(final_losers, key=lambda x: x['% Change'])[:20]
+        
+        print(f"Found {len(final_losers_sorted)} stocks matching criteria (Cap > 100M, Drop > 5%).")
+        return final_losers_sorted
         
     except Exception as e:
         print(f"Error in get_general_market_losers: {e}")
