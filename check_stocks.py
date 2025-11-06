@@ -25,7 +25,7 @@ def clean_price(price_str):
 
 def check_portfolio():
     try:
-        df = pd.read_excel(PORTFOLIO_FILE)
+        df = pd.read_excel(PORTFOLIO_FILE, header=8)
     except FileNotFoundError:
         print(f"Error: Could not find file {PORTFOLIO_FILE}")
         return
