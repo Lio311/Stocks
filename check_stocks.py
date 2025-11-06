@@ -7,29 +7,13 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import re
 from datetime import datetime
-import traceback # For debugging
-
-# --- NEW IMPORT ---
-# This library helps us scan the market for losers
-# Make sure to install it: pip install yahoo_fin
-# AND a hidden dependency: pip install requests_html
-try:
-    from yahoo_fin import stock_info as si
-except ImportError:
-    print("Error: 'yahoo_fin' library not found.")
-    print("Please install it by running: pip install yahoo_fin")
-    exit()
-except Exception as e:
-    # This might catch the requests_html import error indirectly
-    print(f"Error importing yahoo_fin, make sure all dependencies are installed (pip install yahoo_fin requests_html): {e}")
-    exit()
-# -----------------
+import traceback
 
 # --- Configuration ---
 PORTFOLIO_FILE = 'תיק מניות.xlsx'
 TICKER_COLUMN = 'טיקר'
 BUY_PRICE_COLUMN = 'מחיר עלות'
-HEADER_ROW = 8 # The row where data starts (headers are row 9)
+HEADER_ROW = 8  # The row where data starts (headers are row 9)
 # ----------------------
 
 # --- Email Configuration (Reads from Environment Variables) ---
@@ -52,29 +36,6 @@ def clean_price(price_str):
     except ValueError:
         print(f"Warning: Could not convert price string '{price_str}' to float.")
         return None
-
-def convert_market_cap_to_float(cap_str):
-    """ NEW: Converts market cap strings (e.g., '1.5T', '250B', '100M') to float. """
-    if not isinstance(cap_str, str) or cap_str == 'N/A':
-        return 0.0
-    
-    cap_str = cap_str.upper()
-    multiplier = 1.0
-    
-    if 'T' in cap_str:
-        multiplier = 1_000_000_000_000
-    elif 'B' in cap_str:
-        multiplier = 1_000_000_000
-    elif 'M' in cap_str:
-        multiplier = 1_000_000
-    
-    # Remove the letter and any other non-numeric chars (except dot)
-    num_str = re.sub(r"[^0-9.]", "", cap_str)
-    try:
-        return float(num_str) * multiplier
-    except ValueError:
-        return 0.0
-
 
 def get_sp500_tickers():
     """ Fetches the list of S&P 500 tickers from Wikipedia. """
@@ -102,9 +63,9 @@ def get_nasdaq100_tickers():
         print(f"Error fetching NASDAQ-100 tickers: {e}")
         return []
 
-def get_general_market_losers():
-    """ Scans S&P 500 and NASDAQ-100 stocks for big losers. """
-    print("\nScanning market for big losers...")
+def get_general_market_movers():
+    """ Scans S&P 500 and NASDAQ-100 stocks for big movers (both losers and gainers). """
+    print("\nScanning market for big movers...")
     
     # Get all major index tickers
     print("Fetching S&P 500 tickers...")
@@ -121,12 +82,12 @@ def get_general_market_losers():
     
     if not all_tickers:
         print("Could not fetch any tickers.")
-        return []
+        return [], []
     
     try:
         # Download data in batches to avoid rate limits
         batch_size = 100
-        all_losers = []
+        all_movers = []
         
         for i in range(0, len(all_tickers), batch_size):
             batch = all_tickers[i:i+batch_size]
@@ -156,9 +117,9 @@ def get_general_market_losers():
                         
                         pct_change = ((current - previous) / previous) * 100
                         
-                        # Filter: Drop more than 5%
-                        if pct_change <= -5.0:
-                            all_losers.append({
+                        # Collect all significant movers (>5% up or down)
+                        if abs(pct_change) >= 5.0:
+                            all_movers.append({
                                 'ticker': ticker,
                                 'current': float(current),
                                 'previous': float(previous),
@@ -171,15 +132,20 @@ def get_general_market_losers():
                 print(f"Error processing batch: {e}")
                 continue
         
-        if not all_losers:
-            print("No stocks found with drops over 5%.")
-            return []
+        if not all_movers:
+            print("No stocks found with moves over 5%.")
+            return [], []
         
-        # Now get market cap for filtered losers
-        print(f"\nFound {len(all_losers)} stocks down >5%. Fetching market cap data...")
+        # Separate losers and gainers
+        losers = [m for m in all_movers if m['pct_change'] < 0]
+        gainers = [m for m in all_movers if m['pct_change'] > 0]
+        
+        print(f"\nFound {len(losers)} stocks down >5% and {len(gainers)} stocks up >5%.")
+        print("Fetching market cap data...")
+        
+        # Process losers
         final_losers = []
-        
-        for item in all_losers:
+        for item in losers:
             try:
                 ticker_obj = yf.Ticker(item['ticker'])
                 info = ticker_obj.info
@@ -196,18 +162,38 @@ def get_general_market_losers():
             except Exception as e:
                 continue
         
-        # Sort by worst performers and take top 20
-        final_losers_sorted = sorted(final_losers, key=lambda x: x['% Change'])[:20]
+        # Process gainers
+        final_gainers = []
+        for item in gainers:
+            try:
+                ticker_obj = yf.Ticker(item['ticker'])
+                info = ticker_obj.info
+                market_cap = info.get('marketCap', 0)
+                
+                # Filter: Market cap over 100M
+                if market_cap > 100_000_000:
+                    final_gainers.append({
+                        'Symbol': item['ticker'],
+                        'Name': info.get('shortName', item['ticker']),
+                        '% Change': item['pct_change'],
+                        'Market Cap': f"${market_cap/1e9:.1f}B" if market_cap > 1e9 else f"${market_cap/1e6:.0f}M"
+                    })
+            except Exception as e:
+                continue
         
-        print(f"Found {len(final_losers_sorted)} stocks matching criteria (Cap > 100M, Drop > 5%).")
-        return final_losers_sorted
+        # Sort and take top 20 of each
+        final_losers_sorted = sorted(final_losers, key=lambda x: x['% Change'])[:20]
+        final_gainers_sorted = sorted(final_gainers, key=lambda x: x['% Change'], reverse=True)[:20]
+        
+        print(f"Final: {len(final_losers_sorted)} losers and {len(final_gainers_sorted)} gainers (Cap > 100M).")
+        return final_losers_sorted, final_gainers_sorted
         
     except Exception as e:
-        print(f"Error in get_general_market_losers: {e}")
+        print(f"Error in get_general_market_movers: {e}")
         traceback.print_exc()
-        return []
+        return [], []
 
-def generate_html_report(portfolio_details, general_market_losers):
+def generate_html_report(portfolio_details, general_market_losers, general_market_gainers):
     """ Generates a complete HTML report string. """
     today = datetime.now().strftime("%B %d, %Y")
     
@@ -229,8 +215,10 @@ def generate_html_report(portfolio_details, general_market_losers):
             .neutral {{ color: #555; }}
             .alert-section {{ background-color: #fff0f0; border: 2px solid #d9534f; padding: 15px; border-radius: 8px; margin-top: 20px; }}
             .info-section {{ background-color: #f0f8ff; border: 2px solid #4a90e2; padding: 15px; border-radius: 8px; margin-top: 20px; }}
+            .success-section {{ background-color: #f0fff4; border: 2px solid #48bb78; padding: 15px; border-radius: 8px; margin-top: 20px; }}
             .alert-section h2 {{ margin-top: 0; color: #d9534f; }}
             .info-section h2 {{ margin-top: 0; color: #4a90e2; }}
+            .success-section h2 {{ margin-top: 0; color: #48bb78; }}
         </style>
     </head>
     <body>
@@ -281,10 +269,25 @@ def generate_html_report(portfolio_details, general_market_losers):
             
         html += "</div>"
     
-    # --- NEW: General Market Scan Section ---
+    # --- NEW: General Market Gainers Section ---
+    if general_market_gainers:
+        html += "<div class='success-section'>"
+        html += "<h2>📈 General Market Scan - Top Gainers (Cap >100M, Up >5%)</h2>"
+        html += "<table><tr><th>Stock</th><th>Name</th><th>Daily Change</th><th>Market Cap</th></tr>"
+        for stock in general_market_gainers:
+            html += f"""
+                <tr>
+                    <td>{stock['Symbol']}</td>
+                    <td>{stock['Name']}</td>
+                    <td class='positive'>{stock['% Change']:.2f}%</td>
+                    <td>{stock['Market Cap']}</td>
+                </tr>
+            """
+        html += "</table></div>"
+    
+    # --- General Market Losers Section ---
     html += "<div class='info-section' style='background-color: #f5f5f5; border-color: #aaa;'>"
-    # UPDATED: Title reflects the new 5% filter
-    html += "<h2>🌎 General Market Scan - Losers (Cap >100M, Drop >5%)</h2>"
+    html += "<h2>📉 General Market Scan - Top Losers (Cap >100M, Drop >5%)</h2>"
     
     if general_market_losers:
         html += "<table><tr><th>Stock</th><th>Name</th><th>Daily Change</th><th>Market Cap</th></tr>"
@@ -299,11 +302,9 @@ def generate_html_report(portfolio_details, general_market_losers):
             """
         html += "</table>"
     else:
-        # UPDATED: Message reflects the new 5% filter
         html += "<p>No stocks found matching the criteria (Market Cap > 100M and Daily Drop > 5%).</p>"
     
     html += "</div>"
-    # --- End of General Market Scan Section ---
 
     html += """
         <h2>My Portfolio Summary</h2>
@@ -395,7 +396,6 @@ def check_portfolio_and_report():
     
     if not portfolio_map:
         print("No valid tickers found in portfolio file.")
-        # Do not return yet, user might just want the general scan
     
     tickers_list = list(portfolio_map.keys())
     
@@ -404,15 +404,11 @@ def check_portfolio_and_report():
     if tickers_list:
         print(f"Fetching data for {len(tickers_list)} tickers: {', '.join(tickers_list)}")
         try:
-            # --- FIX: Simplified and corrected yf.download call ---
-            # Call only ONCE, with auto_adjust=False.
-            # This is correct for comparing unadjusted buy prices and silences the warning.
             all_data = yf.download(tickers_list, period="5d", progress=False, auto_adjust=False)
             
             if all_data.empty or len(all_data) < 2:
                 print("Could not download sufficient portfolio data from yfinance.")
             else:
-                # auto_adjust=False gives a multi-level dataframe
                 close_prices = all_data['Close']
                 latest_prices = close_prices.iloc[-1]
                 prev_prices = close_prices.iloc[-2]
@@ -420,7 +416,6 @@ def check_portfolio_and_report():
                 for ticker, buy_price in portfolio_map.items():
                     try:
                         if len(tickers_list) == 1:
-                            # Special case if only one ticker, dataframe structure is different
                             current_price = latest_prices
                             prev_close = prev_prices
                         else:
@@ -459,18 +454,16 @@ def check_portfolio_and_report():
     else:
         print("No tickers in portfolio file. Skipping portfolio processing.")
 
-    # --- NEW: Get General Market Losers ---
-    general_market_losers = get_general_market_losers()
-    # --- End ---
+    # --- Get General Market Movers (both losers and gainers) ---
+    general_market_losers, general_market_gainers = get_general_market_movers()
 
-    if not portfolio_details and not general_market_losers:
-        print("No portfolio details or general market losers to report.")
+    if not portfolio_details and not general_market_losers and not general_market_gainers:
+        print("No portfolio details or general market movers to report.")
         return
 
     # --- Report Generation and Sending ---
     print("\nGenerating HTML report...")
-    # Pass the new data to the report generator
-    html_report = generate_html_report(portfolio_details, general_market_losers)
+    html_report = generate_html_report(portfolio_details, general_market_losers, general_market_gainers)
     
     report_filename = "daily_stock_report.html"
     try:
@@ -483,7 +476,6 @@ def check_portfolio_and_report():
     # Send Email
     if SENDER_EMAIL and RECIPIENT_EMAIL:
         print("Sending email...")
-        # THE FIX IS HERE: Make sure this variable 'html_report' matches the one above
         send_email(html_report)
     else:
         print("\nEmail credentials not set. Skipping email send.")
