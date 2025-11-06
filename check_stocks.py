@@ -90,7 +90,7 @@ def get_general_market_losers():
 
         # 3. Apply the filters
         min_market_cap = 100_000_000  # 100M USD
-        min_drop_pct = -20.0          # -20%
+        min_drop_pct = -10.0          # -20%
         
         filtered_losers = losers_df[
             (losers_df['Market Cap Float'] > min_market_cap) &
