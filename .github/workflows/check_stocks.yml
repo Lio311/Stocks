@@ -1,0 +1,30 @@
+name: Check Stock Portfolio
+
+on:
+  schedule:
+    # מריץ את הסקריפט כל שעה, בימים שני עד שישי (UTC)
+    # 0 * * * 1-5 = at minute 0, every hour, Mon-Fri
+    - cron: "0 * * * 1-5"
+  workflow_dispatch: # מוסיף כפתור הרצה ידנית
+
+jobs:
+  run-stock-check:
+    runs-on: ubuntu-latest # מריץ על שרת לינוקס חינמי
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run stock check script
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        run: python check_stocks.py
