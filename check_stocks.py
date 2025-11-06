@@ -41,7 +41,13 @@ def get_sp500_tickers():
     """ Fetches the list of S&P 500 tickers from Wikipedia. """
     try:
         url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-        tables = pd.read_html(url)
+        # Add headers to avoid 403 error
+        tables = pd.read_html(
+            url,
+            storage_options={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        )
         sp500_table = tables[0]
         tickers = sp500_table['Symbol'].tolist()
         # Clean tickers (remove dots that Wikipedia uses)
@@ -55,7 +61,13 @@ def get_nasdaq100_tickers():
     """ Fetches the list of NASDAQ-100 tickers from Wikipedia. """
     try:
         url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
-        tables = pd.read_html(url)
+        # Add headers to avoid 403 error
+        tables = pd.read_html(
+            url,
+            storage_options={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        )
         nasdaq_table = tables[4]  # The correct table index
         tickers = nasdaq_table['Ticker'].tolist()
         return tickers
