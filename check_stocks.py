@@ -9,7 +9,7 @@ import re
 
 # --- Configuration: Update these to match your file ---
 # This must be the exact name of the file you upload to GitHub
-PORTFOLIO_FILE = 'תיק מניות.xlsx - גיליון1.csv' 
+PORTFOLIO_FILE = 'תיק מניות.xlsx' 
 # This is the name of your Ticker/Symbol column
 TICKER_COLUMN = 'טיקר'
 # This is the name of your Buy Price (Cost Price) column
