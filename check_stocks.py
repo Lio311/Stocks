@@ -1,131 +1,104 @@
-import pandas as pd
 import yfinance as yf
+import pandas as pd
+from datetime import datetime
 import smtplib
-import os
-import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import re
 
-# --- Configuration ---
-PORTFOLIO_FILE = 'תיק מניות.xlsx'
-TICKER_COLUMN = 'טיקר'
-BUY_PRICE_COLUMN = 'מחיר עלות'
-# ----------------------
+# === CONFIG ===
+portfolio_file = "portfolio.csv"  # your local CSV file with column 'Symbol'
+alert_threshold = 0.2  # 20%
+email_to = "your_email@example.com"
+email_from = "your_email@example.com"
+email_password = "YOUR_APP_PASSWORD"  # if you want automatic email sending
 
-SENDER_EMAIL = os.environ.get('GMAIL_USER')
-SENDER_PASSWORD = os.environ.get('GMAIL_PASSWORD')
-RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL')
+# === LOAD PORTFOLIO ===
+portfolio = pd.read_csv(portfolio_file)
+symbols = portfolio["Symbol"].tolist()
 
-def clean_price(price_str):
-    if isinstance(price_str, (int, float)):
-        return float(price_str)
-    cleaned_str = re.sub(r"[^0-9.]", "", str(price_str))
-    return float(cleaned_str) if cleaned_str else None
+# === DOWNLOAD DATA ===
+data = yf.download(symbols, period="2d")["Close"]
 
-def check_portfolio():
-    try:
-        df = pd.read_excel(PORTFOLIO_FILE, header=8)
-    except FileNotFoundError:
-        print(f"Error: Could not find file {PORTFOLIO_FILE}")
-        return
-    except Exception as e:
-        print(f"Error reading Excel file: {e}")
-        return
+# === CALCULATE DAILY CHANGES ===
+changes = ((data.iloc[-1] - data.iloc[-2]) / data.iloc[-2]) * 100
+changes = changes.round(2)
 
-    df.columns = [str(c).strip() for c in df.columns]
+# === CREATE ALERTS ===
+drops = changes[changes <= -20]
+gains = changes[changes >= 20]
 
-    required_cols = [TICKER_COLUMN, BUY_PRICE_COLUMN]
-    for col in required_cols:
-        if col not in df.columns:
-            print(f"Error: Missing column '{col}'. Found columns: {list(df.columns)}")
-            return
+# === MARKET SUMMARY ===
+index_symbols = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "Dow Jones": "^DJI"}
+market_data = {name: yf.download(ticker, period="2d")["Close"] for name, ticker in index_symbols.items()}
+market_changes = {
+    name: round(((df.iloc[-1] - df.iloc[-2]) / df.iloc[-2]) * 100, 2)
+    for name, df in market_data.items()
+}
 
-    print("Checking portfolio...")
+# === BUILD HTML REPORT ===
+today = datetime.now().strftime("%B %d, %Y")
 
-    total_drop_alerts = []
-    daily_drop_alerts = []
+html = f"""
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; background-color: #f7f7f7; padding: 20px; }}
+        h1 {{ color: #333; }}
+        table {{ border-collapse: collapse; width: 100%; margin-top: 10px; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #4CAF50; color: white; }}
+        tr:nth-child(even) {{ background-color: #f2f2f2; }}
+        .positive {{ color: green; font-weight: bold; }}
+        .negative {{ color: red; font-weight: bold; }}
+    </style>
+</head>
+<body>
+    <h1>Daily Stock Report - {today}</h1>
 
-    for index, row in df.iterrows():
-        ticker_symbol = None
-        try:
-            ticker_symbol = str(row[TICKER_COLUMN]).strip()
-            buy_price_raw = row[BUY_PRICE_COLUMN]
+    <h2>Market Overview</h2>
+    <table>
+        <tr><th>Index</th><th>Daily Change (%)</th></tr>
+"""
+for name, change in market_changes.items():
+    cls = "positive" if change > 0 else "negative"
+    html += f"<tr><td>{name}</td><td class='{cls}'>{change}</td></tr>"
 
-            if not ticker_symbol or pd.isna(buy_price_raw):
-                continue
+html += """
+    </table>
 
-            buy_price = clean_price(buy_price_raw)
-            if not buy_price:
-                continue
+    <h2>Significant Movements</h2>
+"""
 
-            data = yf.Ticker(ticker_symbol).history(period='5d')  # 5 ימים למקרה שאין מסחר היום
-            if data.empty:
-                print(f"No data for {ticker_symbol}")
-                continue
+if not drops.empty:
+    html += "<h3 style='color:red;'>🔻 Stocks Down More Than 20%</h3><table><tr><th>Symbol</th><th>Change (%)</th></tr>"
+    for symbol, change in drops.items():
+        html += f"<tr><td>{symbol}</td><td class='negative'>{change}</td></tr>"
+    html += "</table>"
 
-            current_price = data['Close'].iloc[-1]
-            prev_close = data['Close'].iloc[-2] if len(data) > 1 else current_price
+if not gains.empty:
+    html += "<h3 style='color:green;'>🚀 Stocks Up More Than 20%</h3><table><tr><th>Symbol</th><th>Change (%)</th></tr>"
+    for symbol, change in gains.items():
+        html += f"<tr><td>{symbol}</td><td class='positive'>{change}</td></tr>"
+    html += "</table>"
 
-            total_change_pct = ((current_price - buy_price) / buy_price) * 100
-            daily_change_pct = ((current_price - prev_close) / prev_close) * 100
+html += "</body></html>"
 
-            print(f"{ticker_symbol}: Total={total_change_pct:.1f}%, Daily={daily_change_pct:.1f}%")
+# === SAVE TO FILE ===
+with open("daily_stock_report.html", "w", encoding="utf-8") as f:
+    f.write(html)
 
-            # ירידה כוללת מעל 30%
-            if total_change_pct <= -30:
-                total_drop_alerts.append(
-                    f"🔻 TOTAL DROP ALERT\n"
-                    f"Stock: {ticker_symbol}\n"
-                    f"Buy Price: {buy_price:.2f}\n"
-                    f"Current: {current_price:.2f}\n"
-                    f"Change: {total_change_pct:.1f}%\n"
-                )
+# === OPTIONAL: SEND EMAIL ===
+send_email = False  # change to True if you want to send email
 
-            # ירידה יומית מעל 10%
-            if daily_change_pct <= -10:
-                daily_drop_alerts.append(
-                    f"⚠️ DAILY DROP ALERT\n"
-                    f"Stock: {ticker_symbol}\n"
-                    f"Yesterday Close: {prev_close:.2f}\n"
-                    f"Current: {current_price:.2f}\n"
-                    f"Change Today: {daily_change_pct:.1f}%\n"
-                )
+if send_email:
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"Daily Stock Report - {today}"
+    msg["From"] = email_from
+    msg["To"] = email_to
+    msg.attach(MIMEText(html, "html"))
 
-        except Exception as e:
-            print(f"Error processing row {index+1}: {e}")
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(email_from, email_password)
+        server.sendmail(email_from, email_to, msg.as_string())
 
-    if total_drop_alerts or daily_drop_alerts:
-        body = ""
-        if total_drop_alerts:
-            body += "=== TOTAL DROP OVER 30% ===\n" + "\n".join(total_drop_alerts) + "\n\n"
-        if daily_drop_alerts:
-            body += "=== DAILY DROP OVER 10% ===\n" + "\n".join(daily_drop_alerts)
-
-        print("\nSending alerts email...")
-        send_email(body)
-    else:
-        print("\nNo alerts triggered today.")
-
-def send_email(body):
-    if not SENDER_EMAIL or not SENDER_PASSWORD or not RECIPIENT_EMAIL:
-        print("Error: Email credentials not set.")
-        return
-
-    msg = MIMEMultipart()
-    msg["Subject"] = "📉 Stock Alerts - Portfolio Monitor"
-    msg["From"] = SENDER_EMAIL
-    msg["To"] = RECIPIENT_EMAIL
-    msg.attach(MIMEText(body, "plain", "utf-8"))
-
-    try:
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.send_message(msg)
-            print("Alert email sent successfully.")
-    except Exception as e:
-        print(f"Error sending email: {e}")
-
-if __name__ == "__main__":
-    check_portfolio()
+print("✅ Report generated successfully: daily_stock_report.html")
