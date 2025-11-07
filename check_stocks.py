@@ -434,11 +434,11 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
     <body>
         <h1>Daily Stock Report - {today}</h1>
     <div class='gemini-section'>
-        <h2>🤖 AI Financial Summary (English)</h2>
+        <h2>🤖 AI Financial Summary </h2>
         {gemini_analysis_html}
     </div>
     <div class='insights-section'>
-        <h2>💡 AI Analyst Insights (English)</h2>
+        <h2>💡 AI Analyst Insights </h2>
         {gemini_insights_html}
     </div>
     """
