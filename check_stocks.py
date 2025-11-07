@@ -256,8 +256,8 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
 
     system_instruction = (
         "You are a financial analyst. Your task is to provide a brief, high-level summary of the provided data. "
-        "**Do not give any financial advice, recommendations, or price predictions.** "
-        "Just summarize the key facts in Hebrew (עברית). "
+        "**Give financial advice, recommendations, or price predictions.** "
+        "Just summarize the key facts in English. "
         "Start with a 1-sentence summary of the portfolio's total daily P/L (in ₪). "
         "Then, add 1-2 sentences about specific portfolio stocks with significant movements (mentioning P/L ₪ amounts). "
         "Finally, add a 1-sentence comment on the general market scan. "
