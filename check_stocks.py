@@ -352,11 +352,13 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
     <body>
         <h1>Daily Stock Report - {today}</h1>
 
+    <!-- --- NEW: Gemini Analysis Section --- -->
     <div class='gemini-section'>
         <h2>🤖 AI Financial Summary</h2>
         {gemini_analysis_html}
     </div>
 
+    <!-- --- Personal Alerts Section --- -->
     """
     
     # --- Personal Alerts Section ---
@@ -416,7 +418,7 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
         html += "</table></div>"
     
     # --- General Market Losers Section ---
-    html += "<div class'alert-section'>"
+    html += "<div class='alert-section'>"
     html += "<h2>📉 General Market Scan - Top Losers (Cap >100M, Drop >5%)</h2>"
     
     if general_market_losers:
