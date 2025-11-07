@@ -378,7 +378,7 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
         html += "</table></div>"
 
     if total_drops or daily_drops_10 or daily_drops_20:
-        html += "<div class='alert-section'><h2>🔻 My Portfolio Alerts & Drops (%)</h2>"
+        html += "<div class='alert-section'><h2>🔻 My Portfolio Alerts & Drops</h2>"
         
         if total_drops:
             html += "<h3 style='color:#d9534f;'>TOTAL DROP Over 30%</h3><table>"
