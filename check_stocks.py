@@ -360,21 +360,28 @@ def get_gemini_insights(portfolio_details, general_market_losers, general_market
         if 'candidates' in result and result['candidates']:
             text = result['candidates'][0]['content']['parts'][0]['text']
             
-            # Convert markdown bullets (*) to HTML lists
-            formatted_text = text.replace('* ', '<li>')
-            # Handle both \n and potential <br> from model
+            # --- Formatting fix starts here ---
+            # 1. Convert Markdown bold (**text**) to HTML bold (<b>text</b>)
+            formatted_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+            # ---------------------
+            
+            # 2. Convert Markdown bullets (*) to HTML list items (<li>)
+            # (Use the already-fixed formatted_text, not the original text)
+            formatted_text = formatted_text.replace('* ', '<li>')
+            
+            # Handle both \n and <br> from the model
             formatted_text = re.sub(r'\n|<br>', '</li>', formatted_text)
             
             # Clean up potential empty list items
             formatted_text = re.sub(r'<li>\s*</li>', '', formatted_text)
             
-            # Ensure it's wrapped in <ul>
+            # Ensure everything is wrapped in <ul>
             if '<li>' in formatted_text:
                 if not formatted_text.endswith('</li>'):
                         formatted_text += '</li>'
                 html_output = f"<ul>{formatted_text}</ul>"
             else:
-                # Fallback if no list is generated
+                # Fallback if no list was created
                 html_output = f"<p>{formatted_text.replace('</li>', '<br>')}</p>"
             
             html_output += "<p style='font-size: 0.7em; color: #666; font-style: italic;'><b>Disclaimer:</b> This AI analysis is for informational purposes only and is not financial advice. Do your own research before making decisions.</p>"
@@ -390,6 +397,8 @@ def get_gemini_insights(portfolio_details, general_market_losers, general_market
         print(f"Error processing Gemini (Insights) response: {e}")
         traceback.print_exc()
         return "<p><i>(Error processing AI insights.)</i></p>"
+
+
 
 def generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html, gemini_insights_html, total_daily_p_l_ils):
     """ Generates a complete HTML report string. """
