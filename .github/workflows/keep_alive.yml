@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send HTTP GET Request to Apps
-        # שימוש ב-GET מלא (כמו דפדפן)
+        # שולח בקשת GET מלאה (כמו דפדפן)
         # -o /dev/null : שולח את פלט ה-HTML ל"חור שחור" (לא שומר אותו)
         # -s : מצב שקט
-        # --fail : גורם לפקודה להיכשל אם השרת מחזיר שגיאה
+        # --fail : גורם לפקודה להיכשל אם השרת מחזיר שגיאה (כמו 404 או 500)
         run: |
           echo "Pinging 8 apps with full GET request..."
           
