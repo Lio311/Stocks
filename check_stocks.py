@@ -447,7 +447,7 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
     total_pl_class = "total-pl-positive" if total_daily_p_l_ils >= 0 else "total-pl-negative"
     html += f"""
     <div class='total-pl-summary {total_pl_class}'>
-        Today's Portfolio P/L: ₪{total_daily_p_l_ils:+.2f}
+        Today's Portfolio P/L: {total_daily_p_l_ils:+.2f}₪
     </div>
     """
 
