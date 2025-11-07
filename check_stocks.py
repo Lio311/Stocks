@@ -126,6 +126,7 @@ def get_general_market_movers():
             print(f"Processing batch {i//batch_size + 1}/{(len(all_tickers)-1)//batch_size + 1} ({len(batch)} tickers)...")
             
             try:
+                # Download 2 days of data to get previous close
                 data = yf.download(batch, period="2d", progress=False, auto_adjust=False, threads=True)
                 
                 if data.empty or len(data) < 2:
@@ -138,6 +139,7 @@ def get_general_market_movers():
                 for ticker in batch:
                     try:
                         if len(batch) == 1:
+                            # Handle single ticker case
                             current = latest_prices
                             previous = prev_prices
                         else:
@@ -158,6 +160,7 @@ def get_general_market_movers():
                                 'pct_change': float(pct_change)
                             })
                     except Exception as e:
+                        # Ignore errors for single tickers
                         continue
                         
             except Exception as e:
@@ -192,6 +195,7 @@ def get_general_market_movers():
                         'Market Cap': f"${market_cap/1e9:.1f}B" if market_cap > 1e9 else f"${market_cap/1e6:.0f}M"
                     })
             except Exception as e:
+                # Ignore errors fetching info for a ticker
                 continue
         
         # Process gainers
@@ -211,6 +215,7 @@ def get_general_market_movers():
                         'Market Cap': f"${market_cap/1e9:.1f}B" if market_cap > 1e9 else f"${market_cap/1e6:.0f}M"
                     })
             except Exception as e:
+                # Ignore errors fetching info for a ticker
                 continue
         
         # Sort and take top 20 of each
@@ -227,7 +232,7 @@ def get_general_market_movers():
 
 def get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers, total_daily_p_l_ils):
     """
-    Sends portfolio data to Gemini API for analysis and returns an HTML-formatted summary.
+    Sends portfolio data to Gemini API for a brief summary in ENGLISH.
     """
     print("Getting Gemini analysis (English Summary)...")
     
@@ -252,9 +257,8 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
     for item in general_market_losers:
         prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}%\n"
 
-    # --- CORRECTED system_instruction ---
-    # The user's provided code had an error saying "**Give** financial advice".
-    # Correcting this back to "**Do NOT give**..." to maintain safety.
+    # 2. System instruction
+    # CORRECTED: User's code said "**Give** advice", changing back to "**Do NOT give** advice"
     system_instruction = (
         "You are a financial analyst. Your task is to provide a brief, high-level summary of the provided data. "
         "**Do NOT give financial advice, recommendations, or price predictions.** "
@@ -304,15 +308,16 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
         return "<p><i>(Error processing AI analysis.)</i></p>"
 
 # --- $$$$ NEW FUNCTION: get_gemini_insights $$$$ ---
+# --- (Updated to respond in ENGLISH) ---
 def get_gemini_insights(portfolio_details, general_market_losers, general_market_gainers, total_daily_p_l_ils):
     """
-    Sends data to Gemini API for high-level insights.
-    Instructed in ENGLISH, responds in HEBREW.
+    Sends data to Gemini API for high-level "points for thought" in ENGLISH.
+    This function explicitly AVOIDS giving buy/sell advice.
     """
-    print("Getting Gemini insights (Hebrew Insights)...")
+    print("Getting Gemini insights (English Insights)...")
     
     if not GEMINI_API_KEY:
-        return "<p><i>(AI analysis is not configured.)</i></p>"
+        return "<p><i>(AI insights are not configured.)</i></p>"
 
     # 1. Create the prompt data with English labels
     prompt_data = f"My portfolio's total daily P/L: ₪{total_daily_p_l_ils:+.2f}.\n\n"
@@ -332,20 +337,20 @@ def get_gemini_insights(portfolio_details, general_market_losers, general_market
     for item in general_market_gainers:
         prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}% (Market Cap: {item['Market Cap']})\n"
 
-    # 2. Create the System Instruction in ENGLISH (as requested)
+    # 2. Create the System Instruction in ENGLISH
     system_instruction = (
         "You are a financial analyst. Your task is to identify interesting risks and opportunities in the provided data. "
         "Your analysis is based *only* on the provided price, P/L, and market cap data. You do not have access to news or fundamental data."
         "\n\n"
         "**Crucially: You must NOT give specific buy or sell recommendations (e.g., 'You should buy X' or 'You should sell Y').**"
         "\n\n"
-        "Instead, provide 2-3 'points for thought' in **HEBREW**, as bullet points."
+        "Instead, provide 2-3 'points for thought' in **ENGLISH**, as bullet points."
         "Focus on: "
         "1. Identifying a stock from the user's portfolio that had a sharp move (up or down) and what they should check about it."
         "2. Identifying a stock from the 'Top Losers' list that might be an 'interesting opportunity for further research' (e.g., a large-cap stock with a sharp drop)."
         "3. A general insight about the portfolio's performance relative to the market."
         "\n\n"
-        "The response MUST be in HEBREW."
+        "The response MUST be in ENGLISH."
     )
 
     api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
@@ -386,7 +391,7 @@ def get_gemini_insights(portfolio_details, general_market_losers, general_market
                 html_output = f"<p>{formatted_text.replace('</li>', '<br>')}</p>"
 
             
-            html_output += "<p style='font-size: 0.7em; color: #666; font-style: italic;'><b>כתב ויתור:</b> ניתוח AI זה מיועד למטרות מידע בלבד ואינו מהווה ייעוץ פיננסי. בצע מחקר משלך לפני קבלת החלטות.</p>"
+            html_output += "<p style='font-size: 0.7em; color: #666; font-style: italic;'><b>Disclaimer:</b> This AI analysis is for informational purposes only and is not financial advice. Conduct your own research before making any decisions.</p>"
             return html_output
         else:
             print("Gemini API (Insights) returned no candidates.")
@@ -438,23 +443,23 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
             .info-section {{ background-color: #f0f8ff; border: 2px solid #4a90e2; padding: 15px; border-radius: 8px; margin-top: 20px; }}
             .success-section {{ background-color: #f0fff4; border: 2px solid #48bb78; padding: 15px; border-radius: 8px; margin-top: 20px; }}
             
-            /* Gemini Section Style */
+            /* Gemini Section Style (Yellow) */
             .gemini-section {{ background-color: #fdf8e2; border: 2px solid #f0b90b; padding: 15px; border-radius: 8px; margin-top: 20px; }}
             .gemini-section h2 {{ margin-top: 0; color: #d98c00; }}
             .gemini-section p {{ font-size: 1.1em; line-height: 1.6; }}
 
-            /* $$$$ NEW: Insights Section Style $$$$ */
+            /* $$$$ NEW: Insights Section Style (Purple) $$$$ */
             .insights-section {{ 
                 background-color: #f3f0ff; 
                 border: 2px solid #6c48bb; 
                 padding: 15px; 
                 border-radius: 8px; 
                 margin-top: 20px;
-                direction: rtl; /* Set text direction to RTL for this section */
-                text-align: right; /* Align text to the right */
+                direction: ltr; /* Set to LTR for English */
+                text-align: left; /* Set to left for English */
             }}
             .insights-section h2 {{ margin-top: 0; color: #5a3e9b; }}
-            .insights-section ul {{ padding-right: 20px; }} /* Add padding for RTL list */
+            .insights-section ul {{ padding-left: 20px; }} /* Use padding-left for LTR list */
             .insights-section li {{ font-size: 1.1em; line-height: 1.6; margin-bottom: 10px; }}
 
             .alert-section h2 {{ margin-top: 0; color: #d9534f; }}
@@ -466,12 +471,12 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
         <h1>Daily Stock Report - {today}</h1>
 
     <div class='gemini-section'>
-        <h2>🤖 AI Financial Summary (English)</h2>
+        <h2>🤖 AI Financial Summary</h2>
         {gemini_analysis_html}
     </div>
 
-    <div class'insights-section'>
-        <h2>💡 AI Analyst Insights (Hebrew)</h2>
+    <div class='insights-section'>
+        <h2>💡 AI Analyst Insights</h2>
         {gemini_insights_html}
     </div>
 
@@ -775,7 +780,7 @@ def check_portfolio_and_report():
         print("No tickers in portfolio file. Skipping portfolio processing.")
 
     # Get General Market Movers (both losers and gainers)
-    general_market_losers, general_market_gainers = get_general_market_movers()
+    general_market_movers, general_market_gainers = get_general_market_movers()
 
     # Get Gemini AI Analysis
     gemini_analysis_html = get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers, total_portfolio_daily_p_l_ils)
