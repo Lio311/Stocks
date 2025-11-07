@@ -1,38 +1,27 @@
-# שם האוטומציה (יופיע בטאב ה-Actions ב-GitHub)
 name: Keep Streamlit Apps Alive
 
-# הגדרת הטריגר (מתי להריץ את האוטומציה)
 on:
   schedule:
     # הרצה כל 45 דקות
     - cron: '*/45 * * * *'
   workflow_dispatch:
-    # מוסיף כפתור להרצה ידנית (נוח לבדיקות)
+    # מאפשר הרצה ידנית לצרכי בדיקה
 
 jobs:
-  # הגדרת "עבודה" אחת
   wake-apps:
-    # הגדרה שהיא תרוץ על שרת לינוקס סטנדרטי של GitHub
     runs-on: ubuntu-latest
-
-    # הצעדים שהעבודה תבצע
     steps:
       - name: Send HTTP Request to Apps
-        # שימוש בפקודת cURL פשוטה כדי "לבקר" באתרים
-        # --head: מבקש רק את הכותרות, לא מוריד את כל האתר (יעיל ומהיר)
-        # -s: מצב שקט (לא מדפיס התקדמות)
-        # --fail: גורם לפקודה להיכשל אם האתר מחזיר שגיאה (כדי שתדע אם משהו נפל)
         run: |
-          echo "Pinging apps to keep them alive..."
+          echo "Pinging 8 apps to keep them alive..."
           
-          curl -s --head --fail "https://lioportfolio.streamlit.app/"
-          curl -s --head --fail "https://liostocks.streamlit.app/"
-          curl -s --head --fail "https://fourieropticssimulator.streamlit.app/"
-          curl -s --head --fail "https://rppgvitalsanalyzer.streamlit.app/"
-          curl -s --head --fail "https://gaitanalysis3.streamlit.app/"
-          curl -s --head --fail "https://ecgarrhythmiasimulator.streamlit.app/"
-          curl -s --head --fail "https://ringsimulator.streamlit.app/"
-          curl -s --head --fail "https://physiosimulator.streamlit.app/"
-          curl -s --head --fail "https://smartriagegantt.streamlit.app/"
+          curl -s --head --fail "https://liostocks.streamlit.app"
+          curl -s --head --fail "https://fourieropticssimulator.streamlit.app"
+          curl -s --head --fail "https://rppgvitalsanalyzer.streamlit.app"
+          curl -s --head --fail "https://gaitanalysis3.streamlit.app"
+          curl -s --head --fail "https://ecgarrhythmiasimulator.streamlit.app"
+          curl -s --head --fail "https://ringsimulator.streamlit.app"
+          curl -s --head --fail "https://physiosimulator.streamlit.app"
+          curl -s --head --fail "https://smartriagegantt.streamlit.app"
           
-          echo "Ping complete. Apps are awake."
+          echo "Ping complete. Apps should be awake."
