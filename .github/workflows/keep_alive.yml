@@ -11,9 +11,7 @@ jobs:
   wake-apps-matrix:
     runs-on: ubuntu-latest
     
-    # שימוש ב-Matrix כדי להריץ את אותם צעדים עבור כל URL
     strategy:
-      # אם אחד נכשל, אל תבטל את השאר
       fail-fast: false
       matrix:
         app_url:
@@ -37,16 +35,15 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 3. התקנת דפדפן כרום ודרייברים (חיוני לסלניום)
-      - name: Install system dependencies (Chrome Browser)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser chromium-chromedriver
-
+      # 3. התקנת דפדפן כרום ו-WebDriver (הדרך הנכונה)
+      #    זה מחליף את הפקודה apt-get הקודמת
+      - name: Set up Chrome & ChromeDriver
+        uses: browser-actions/setup-chrome@v1
+      
       # 4. התקנת ספריות פייתון (סלניום)
       - name: Install Python dependencies
         run: pip install selenium
 
-      # 5. הרצת סקריפט הפייתון עם ה-URL הנוכחי מה-Matrix
+      # 5. הרצת סקריפט הפייתון
       - name: Run wake-up script for ${{ matrix.app_url }}
         run: python wake_app.py ${{ matrix.app_url }}
