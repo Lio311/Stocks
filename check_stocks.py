@@ -242,8 +242,8 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
     for item in portfolio_details:
         prompt_data += (
             f"- {item['ticker']} ({item['num_shares']} shares): "
-            f"Total P/L: ₪{item['total_p_l']:+.2f} ({item['total_change_pct']:.1f}%), "
-            f"Daily P/L: ₪{item['daily_p_l']:+.2f} ({item['daily_change_pct']:.1f}%)\n"
+            f"Total P/L: {item['total_p_l']:+.2f}₪ ({item['total_change_pct']:.1f}%), "
+            f"Daily P/L: {item['daily_p_l']:+.2f}₪ ({item['daily_change_pct']:.1f}%)\n"
         )
     
     prompt_data += "\nHere are today's top market gainers (Cap > 100M, Up > 5%):\n"
