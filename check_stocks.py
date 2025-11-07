@@ -227,7 +227,7 @@ def get_general_market_movers():
         return [], []
 
 # --- UPDATED FUNCTION: GET GEMINI ANALYSIS ---
-def get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers, total_daily_p_l):
+def get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers, total_daily_p_l_ils):
     """
     Sends portfolio data to Gemini API for analysis and returns an HTML-formatted summary.
     """
@@ -237,13 +237,13 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
         print("Gemini API key not found. Skipping AI analysis.")
         return "<p><i>(AI analysis is not configured. Please add a GEMINI_API_KEY secret.)</i></p>"
 
-    # 1. Create the prompt - NOW WITH P/L DATA
-    prompt_data = f"My portfolio's total gain/loss for today is ${total_daily_p_l:+.2f}.\n\nHere is my detailed portfolio data:\n"
+    # 1. Create the prompt - NOW WITH ILS (₪) P/L DATA
+    prompt_data = f"My portfolio's total gain/loss for today is ₪{total_daily_p_l_ils:+.2f}.\n\nHere is my detailed portfolio data (in ILS):\n"
     for item in portfolio_details:
         prompt_data += (
             f"- {item['ticker']} ({item['num_shares']} shares): "
-            f"Total P/L: ${item['total_p_l']:+.2f} ({item['total_change_pct']:.1f}%), "
-            f"Daily P/L: ${item['daily_p_l']:+.2f} ({item['daily_change_pct']:.1f}%)\n"
+            f"Total P/L: ₪{item['total_p_l']:+.2f} ({item['total_change_pct']:.1f}%), "
+            f"Daily P/L: ₪{item['daily_p_l']:+.2f} ({item['daily_change_pct']:.1f}%)\n"
         )
     
     prompt_data += "\nHere are today's top market gainers (Cap > 100M, Up > 5%):\n"
@@ -257,9 +257,9 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
     system_instruction = (
         "You are a financial analyst. Your task is to provide a brief, high-level summary of the provided data. "
         "**Do not give any financial advice, recommendations, or price predictions.** "
-        "Just summarize the key facts. "
-        "Start with a 1-sentence summary of the portfolio's total daily P/L. "
-        "Then, add 1-2 sentences about specific portfolio stocks with significant movements (mentioning P/L $ amounts). "
+        "Just summarize the key facts in Hebrew (עברית). "
+        "Start with a 1-sentence summary of the portfolio's total daily P/L (in ₪). "
+        "Then, add 1-2 sentences about specific portfolio stocks with significant movements (mentioning P/L ₪ amounts). "
         "Finally, add a 1-sentence comment on the general market scan. "
         "Keep the entire response to 3-4 sentences total."
     )
@@ -287,7 +287,9 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
             # FIX: Perform the replace operation *before* the f-string
             formatted_text = text.replace('\n', '<br>')
             html_output = f"<p>{formatted_text}</p>"
-            html_output += "<p><small><i><b>Disclaimer:</b> This AI-generated summary is for informational purposes only and is not financial advice.</i></small></p>"
+            
+            # --- UPDATED: Smaller Disclaimer ---
+            html_output += "<p style='font-size: 0.7em; color: #666; font-style: italic;'><b>Disclaimer:</b> This AI-generated summary is for informational purposes only and is not financial advice.</p>"
             return html_output
         else:
             print("Gemini API returned no candidates.")
@@ -303,7 +305,7 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
 
 
 # --- UPDATED FUNCTION: generate_html_report ---
-def generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html, total_daily_p_l):
+def generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html, total_daily_p_l_ils):
     """ Generates a complete HTML report string. """
     today = datetime.now().strftime("%B %d, %Y")
     
@@ -315,7 +317,7 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
             body {{ font-family: Arial, sans-serif; background-color: #f7f7f7; padding: 20px; direction: ltr; }}
             h1 {{ color: #333; border-bottom: 2px solid #4CAF50; }}
             h2 {{ color: #444; margin-top: 30px; }}
-            /* NEW: Style for the Total P/L summary */
+            /* UPDATED: Style for the Total P/L summary */
             .total-pl-summary {{ 
                 font-size: 1.5em; 
                 font-weight: bold; 
@@ -441,11 +443,11 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
     # --- UPDATED: My Portfolio Summary ---
     html += "<h2>My Portfolio Summary</h2>"
     
-    # --- NEW: Total Daily P/L Summary ---
-    total_pl_class = "total-pl-positive" if total_daily_p_l >= 0 else "total-pl-negative"
+    # --- UPDATED: Total Daily P/L Summary (now in ILS ₪) ---
+    total_pl_class = "total-pl-positive" if total_daily_p_l_ils >= 0 else "total-pl-negative"
     html += f"""
     <div class='total-pl-summary {total_pl_class}'>
-        Today's Portfolio P/L: ${total_daily_p_l:+.2f}
+        Today's Portfolio P/L: ₪{total_daily_p_l_ils:+.2f}
     </div>
     """
 
@@ -456,14 +458,14 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
                 <th>Shares</th>
                 <th>Buy Price</th>
                 <th>Current Price</th>
-                <th>Daily P/L ($)</th>
+                <th>Daily P/L (₪)</th>
                 <th>Daily Change (%)</th>
-                <th>Total P/L ($)</th>
+                <th>Total P/L (₪)</th>
                 <th>Total Change (%)</th>
             </tr>
     """
 
-    # --- Portfolio Summary Table ---
+    # --- Portfolio Summary Table (now in ILS ₪) ---
     for stock in portfolio_details:
         daily_cls = "positive" if stock['daily_change_pct'] > 0 else ("negative" if stock['daily_change_pct'] < 0 else "neutral")
         total_cls = "positive" if stock['total_change_pct'] > 0 else ("negative" if stock['total_change_pct'] < 0 else "neutral")
@@ -474,9 +476,9 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
                 <td>{stock['num_shares']}</td>
                 <td>{stock['buy_price']:.2f}</td>
                 <td>{stock['current_price']:.2f}</td>
-                <td class='{daily_cls}'>${stock['daily_p_l']:+.2f}</td>
+                <td class='{daily_cls}'>₪{stock['daily_p_l']:+.2f}</td>
                 <td class='{daily_cls}'>{stock['daily_change_pct']:+.2f}%</td>
-                <td class='{total_cls}'>${stock['total_p_l']:+.2f}</td>
+                <td class='{total_cls}'>₪{stock['total_p_l']:+.2f}</td>
                 <td class='{total_cls}'>{stock['total_change_pct']:+.2f}%</td>
             </tr>
         """
@@ -531,6 +533,25 @@ def check_portfolio_and_report():
             print(f"Error: Missing column '{col}'. Found columns: {list(df.columns)}")
             return
 
+    # --- NEW: Fetch USD/ILS Exchange Rate ---
+    print("Fetching USD/ILS exchange rate...")
+    usd_ils_rate = 0.0
+    try:
+        ils_ticker = yf.Ticker("ILS=X")
+        ils_data = ils_ticker.history(period="1d")
+        if not ils_data.empty:
+            usd_ils_rate = ils_data['Close'].iloc[-1]
+            print(f"Current USD/ILS rate: {usd_ils_rate:.4f}")
+        else:
+            print("Warning: Could not fetch USD/ILS rate. Defaulting to 0. P/L will be incorrect.")
+    except Exception as e:
+        print(f"Error fetching USD/ILS rate: {e}. Defaulting to 0. P/L will be incorrect.")
+    
+    if usd_ils_rate == 0.0:
+        # Fallback in case the rate fetch fails
+        print("Using a fallback rate of 3.7. THIS IS A FALLBACK.")
+        usd_ils_rate = 3.7 # Hardcoded fallback
+
     print("Reading portfolio from Excel...")
     
     # --- UPDATED: portfolio_map now holds a dictionary ---
@@ -559,7 +580,7 @@ def check_portfolio_and_report():
     
     # --- Portfolio Data Processing ---
     portfolio_details = []
-    total_portfolio_daily_p_l = 0.0 # <-- NEW: Initialize total P/L
+    total_portfolio_daily_p_l_ils = 0.0 # <-- NEW: Initialize total P/L in ILS
     
     if tickers_list:
         print(f"Fetching data for {len(tickers_list)} tickers: {', '.join(tickers_list)}")
@@ -590,14 +611,18 @@ def check_portfolio_and_report():
                             print(f"Skipping {ticker}: Missing current or previous price data.")
                             continue
 
-                        # --- NEW: P/L Calculations ---
+                        # --- NEW: P/L Calculations (USD) ---
                         daily_change_per_share = current_price - prev_close
                         total_change_per_share = current_price - buy_price
                         
-                        daily_p_l = daily_change_per_share * num_shares
-                        total_p_l = total_change_per_share * num_shares
+                        daily_p_l_usd = daily_change_per_share * num_shares
+                        total_p_l_usd = total_change_per_share * num_shares
                         
-                        total_portfolio_daily_p_l += daily_p_l # <-- Add to total
+                        # --- NEW: Convert P/L to ILS ---
+                        daily_p_l_ils = daily_p_l_usd * usd_ils_rate
+                        total_p_l_ils = total_p_l_usd * usd_ils_rate
+                        
+                        total_portfolio_daily_p_l_ils += daily_p_l_ils # <-- Add to total
                         
                         # --- Standard % Calculations ---
                         total_change_pct = (total_change_per_share / buy_price) * 100
@@ -611,14 +636,15 @@ def check_portfolio_and_report():
                             "daily_change_pct": daily_change_pct,
                             "total_change_pct": total_change_pct,
                             "num_shares": num_shares,    # <-- NEW
-                            "daily_p_l": daily_p_l,      # <-- NEW
-                            "total_p_l": total_p_l       # <-- NEW
+                            "daily_p_l": daily_p_l_ils,  # <-- Storing ILS value
+                            "total_p_l": total_p_l_ils   # <-- Storing ILS value
                         }
                         portfolio_details.append(details)
                         
-                        print(f"{ticker} ({num_shares} shares): Buy={buy_price:.2f}, Current={current_price:.2f}, "
-                              f"Daily P/L=${daily_p_l:+.2f} ({daily_change_pct:+.1f}%), "
-                              f"Total P/L=${total_p_l:+.2f} ({total_change_pct:+.1f}%)")
+                        # --- UPDATED: Print statement now shows ILS ---
+                        print(f"{ticker} ({num_shares} shares): Buy=${buy_price:.2f}, Current=${current_price:.2f}, "
+                              f"Daily P/L=₪{daily_p_l_ils:+.2f} ({daily_change_pct:+.1f}%), "
+                              f"Total P/L=₪{total_p_l_ils:+.2f} ({total_change_pct:+.1f}%)")
 
                     except KeyError:
                          print(f"Warning: No data found for ticker '{ticker}' in downloaded batch. It might be delisted or invalid.")
@@ -635,17 +661,17 @@ def check_portfolio_and_report():
     # --- Get General Market Movers (both losers and gainers) ---
     general_market_losers, general_market_gainers = get_general_market_movers()
 
-    # --- NEW: Get Gemini Analysis (now passing total P/L) ---
-    gemini_analysis_html = get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers, total_portfolio_daily_p_l)
+    # --- NEW: Get Gemini Analysis (now passing total P/L in ILS) ---
+    gemini_analysis_html = get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers, total_portfolio_daily_p_l_ils)
     # --- End ---
 
     if not portfolio_details and not general_market_losers and not general_market_gainers:
         print("No portfolio details or general market movers to report.")
         return
 
-    # --- Report Generation and Sending (now passing total P/L) ---
+    # --- Report Generation and Sending (now passing total P/L in ILS) ---
     print("\nGenerating HTML report...")
-    html_report = generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html, total_portfolio_daily_p_l)
+    html_report = generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html, total_portfolio_daily_p_l_ils)
     
     report_filename = "daily_stock_report.html"
     try:
