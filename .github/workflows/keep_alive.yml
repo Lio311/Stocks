@@ -1,4 +1,4 @@
-name: Keep Streamlit Apps Alive
+name: Keep Streamlit Apps Alive (with Selenium)
 
 on:
   schedule:
@@ -8,24 +8,45 @@ on:
     # מאפשר הרצה ידנית לצרכי בדיקה
 
 jobs:
-  wake-apps:
+  wake-apps-matrix:
     runs-on: ubuntu-latest
+    
+    # שימוש ב-Matrix כדי להריץ את אותם צעדים עבור כל URL
+    strategy:
+      # אם אחד נכשל, אל תבטל את השאר
+      fail-fast: false
+      matrix:
+        app_url:
+          - "https://liostocks.streamlit.app"
+          - "https://fourieropticssimulator.streamlit.app"
+          - "https://rppgvitalsanalyzer.streamlit.app"
+          - "https://gaitanalysis3.streamlit.app"
+          - "https://ecgarrhythmiasimulator.streamlit.app"
+          - "https://ringsimulator.streamlit.app"
+          - "https://physiosimulator.streamlit.app"
+          - "https://smartriagegantt.streamlit.app"
+
     steps:
-      - name: Send HTTP GET Request to Apps
-        # שולח בקשת GET מלאה (כמו דפדפן)
-        # -o /dev/null : שולח את פלט ה-HTML ל"חור שחור" (לא שומר אותו)
-        # -s : מצב שקט
-        # --fail : גורם לפקודה להיכשל אם השרת מחזיר שגיאה (כמו 404 או 500)
+      # 1. שכפול ה-Repo (כדי לקבל גישה לסקריפט הפייתון)
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # 2. התקנת פייתון
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 3. התקנת דפדפן כרום ודרייברים (חיוני לסלניום)
+      - name: Install system dependencies (Chrome Browser)
         run: |
-          echo "Pinging 8 apps with full GET request..."
-          
-          curl -s --fail -o /dev/null "https://liostocks.streamlit.app"
-          curl -s --fail -o /dev/null "https://fourieropticssimulator.streamlit.app"
-          curl -s --fail -o /dev/null "https://rppgvitalsanalyzer.streamlit.app"
-          curl -s --fail -o /dev/null "https://gaitanalysis3.streamlit.app"
-          curl -s --fail -o /dev/null "https://ecgarrhythmiasimulator.streamlit.app"
-          curl -s --fail -o /dev/null "https://ringsimulator.streamlit.app"
-          curl -s --fail -o /dev/null "https://physiosimulator.streamlit.app"
-          curl -s --fail -o /dev/null "https://smartriagegantt.streamlit.app"
-          
-          echo "Ping complete. Apps should be awake."
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser chromium-chromedriver
+
+      # 4. התקנת ספריות פייתון (סלניום)
+      - name: Install Python dependencies
+        run: pip install selenium
+
+      # 5. הרצת סקריפט הפייתון עם ה-URL הנוכחי מה-Matrix
+      - name: Run wake-up script for ${{ matrix.app_url }}
+        run: python wake_app.py ${{ matrix.app_url }}
