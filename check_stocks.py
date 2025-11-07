@@ -257,7 +257,7 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
     system_instruction = (
         "You are a financial analyst. Your task is to provide a brief, high-level summary of the provided data. "
         # 
-        # *** THIS IS THE ORIGINAL INSTRUCTION - KEEPING IT FOR THIS FUNCTION ***
+        # *** CORRECTED INSTRUCTION (from "Give" to "Do NOT give") ***
         "**Do NOT give financial advice, recommendations, or price predictions.** " 
         #
         #
@@ -268,7 +268,8 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
         "Keep the entire response to 3-4 sentences total."
     )
 
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-preview-05-2024:generateContent?key={GEMINI_API_KEY}"
+    # --- $$$$ UPDATED MODEL NAME (as requested by user) $$$$ ---
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [{
@@ -352,7 +353,8 @@ def get_gemini_insights(portfolio_details, general_market_losers, general_market
         "התשובה חייבת להיות בעברית."
     )
 
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-preview-05-2024:generateContent?key={GEMINI_API_KEY}"
+    # --- $$$$ UPDATED MODEL NAME (as requested by user) $$$$ ---
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [{
@@ -374,12 +376,21 @@ def get_gemini_insights(portfolio_details, general_market_losers, general_market
             
             # Convert markdown bullets (*) to HTML lists
             formatted_text = text.replace('* ', '<li>')
-            formatted_text = formatted_text.replace('\n', '</li>')
-            # Ensure the last item is closed
+            # Handle both \n and potential <br> from model
+            formatted_text = re.sub(r'\n|<br>', '</li>', formatted_text)
+            
+            # Clean up potential empty list items
+            formatted_text = re.sub(r'<li>\s*</li>', '', formatted_text)
+            
+            # Ensure it's wrapped in <ul>
             if '<li>' in formatted_text:
-                 formatted_text += '</li>'
-                 
-            html_output = f"<ul>{formatted_text}</ul>"
+                if not formatted_text.endswith('</li>'):
+                     formatted_text += '</li>'
+                html_output = f"<ul>{formatted_text}</ul>"
+            else:
+                # Fallback if no list is generated
+                html_output = f"<p>{formatted_text.replace('</li>', '<br>')}</p>"
+
             
             html_output += "<p style='font-size: 0.7em; color: #666; font-style: italic;'><b>כתב ויתור:</b> ניתוח AI זה מיועד למטרות מידע בלבד ואינו מהווה ייעוץ פיננסי. בצע מחקר משלך לפני קבלת החלטות.</p>"
             return html_output
@@ -467,7 +478,7 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
         {gemini_analysis_html}
     </div>
 
-    <div class'insights-section'>
+    <div class='insights-section'>
         <h2>💡 תובנות אנליסט (AI)</h2>
         {gemini_insights_html}
     </div>
@@ -696,7 +707,8 @@ def check_portfolio_and_report():
     if tickers_list:
         print(f"Fetching data for {len(tickers_list)} tickers: {', '.join(tickers_list)}")
         try:
-            all_data = yf.download(tickers_list, period="5d", progress=False, auto_adjust=False)
+            # --- Changed period to "2d" to ensure we have prev_close ---
+            all_data = yf.download(tickers_list, period="2d", progress=False, auto_adjust=False)
             
             if all_data.empty or len(all_data) < 2:
                 print("Could not download sufficient portfolio data from yfinance.")
@@ -712,6 +724,7 @@ def check_portfolio_and_report():
                         num_shares = data['shares']
                         
                         if len(tickers_list) == 1:
+                            # Handle case of single ticker download (dataframe structure is different)
                             current_price = latest_prices
                             prev_close = prev_prices
                         else:
@@ -736,8 +749,10 @@ def check_portfolio_and_report():
                         total_portfolio_daily_p_l_ils += daily_p_l_ils # <-- Add to total
                         
                         # --- Standard % Calculations ---
-                        total_change_pct = (total_change_per_share / buy_price) * 100
-                        daily_change_pct = (daily_change_per_share / prev_close) * 100
+                        # Avoid division by zero if buy_price is 0
+                        total_change_pct = (total_change_per_share / buy_price) * 100 if buy_price != 0 else 0
+                        daily_change_pct = (daily_change_per_share / prev_close) * 100 if prev_close != 0 else 0
+
 
                         details = {
                             "ticker": ticker,
