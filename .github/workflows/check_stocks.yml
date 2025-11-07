@@ -2,9 +2,10 @@ name: Check Stock Portfolio
 
 on:
   schedule:
-    # מריץ את הסקריפט כל שעה, בימים שני עד שישי (UTC)
-    # 0 * * * 1-5 = at minute 0, every hour, Mon-Fri
-    - cron: "0 * * * 1-5"
+    # מריץ ב-14:32 UTC (שזה 16:32 שעון ישראל, UTC+2)
+    - cron: "32 14 * * 1-5"
+    # מריץ ב-20:00 UTC (שזה 22:00 שעון ישראל, UTC+2)
+    - cron: "0 20 * * 1-5"
   workflow_dispatch: # מוסיף כפתור הרצה ידנית
 
 jobs:
