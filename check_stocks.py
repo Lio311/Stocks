@@ -231,7 +231,7 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
     """
     Sends portfolio data to Gemini API for analysis and returns an HTML-formatted summary.
     """
-    print("Getting Gemini analysis...")
+    print("Getting Gemini analysis (English Summary)...")
     
     if not GEMINI_API_KEY:
         print("Gemini API key not found. Skipping AI analysis.")
@@ -256,7 +256,11 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
 
     system_instruction = (
         "You are a financial analyst. Your task is to provide a brief, high-level summary of the provided data. "
-        "**Give financial advice, recommendations, or price predictions.** "
+        # 
+        # *** THIS IS THE ORIGINAL INSTRUCTION - KEEPING IT FOR THIS FUNCTION ***
+        "**Do NOT give financial advice, recommendations, or price predictions.** " 
+        #
+        #
         "Just summarize the key facts in English. "
         "Start with a 1-sentence summary of the portfolio's total daily P/L (in ₪). "
         "Then, add 1-2 sentences about specific portfolio stocks with significant movements (mentioning P/L ₪ amounts). "
@@ -264,7 +268,7 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
         "Keep the entire response to 3-4 sentences total."
     )
 
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-preview-05-2024:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [{
@@ -303,9 +307,98 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
         traceback.print_exc()
         return "<p><i>(Error processing AI analysis.)</i></p>"
 
+# --- $$$$ NEW FUNCTION: get_gemini_insights $$$$ ---
+def get_gemini_insights(portfolio_details, general_market_losers, general_market_gainers, total_daily_p_l_ils):
+    """
+    Sends data to Gemini API for high-level insights in HEBREW.
+    This function explicitly AVOIDS giving buy/sell advice.
+    """
+    print("Getting Gemini insights (Hebrew Insights)...")
+    
+    if not GEMINI_API_KEY:
+        return "<p><i>(ניתוח AI אינו מוגדר.)</i></p>"
+
+    # 1. Create the prompt data in Hebrew
+    prompt_data = f"סיכום הרווח/הפסד היומי הכולל בתיק שלי: {total_daily_p_l_ils:+.2f}₪.\n\n"
+    prompt_data += "פירוט התיק שלי (בשקלים):\n"
+    for item in portfolio_details:
+        prompt_data += (
+            f"- {item['ticker']} ({item['num_shares']} מניות): "
+            f"רווח/הפסד כולל: {item['total_p_l']:+.2f}₪ ({item['total_change_pct']:.1f}%), "
+            f"רווח/הפסד יומי: {item['daily_p_l']:+.2f}₪ ({item['daily_change_pct']:.1f}%)\n"
+        )
+    
+    prompt_data += "\nאלו המניות הבולטות שירדו היום בשוק (שווי שוק > 100M, ירידה > 5%):\n"
+    for item in general_market_losers:
+        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}% (שווי שוק: {item['Market Cap']})\n"
+
+    prompt_data += "\nאלו המניות הבולטות שעלו היום בשוק (שווי שוק > 100M, עלייה > 5%):\n"
+    for item in general_market_gainers:
+        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}% (שווי שוק: {item['Market Cap']})\n"
+
+    # 2. Create the System Instruction in Hebrew - this is the critical part
+    system_instruction = (
+        "אתה אנליסט פיננסי. תפקידך לזהות סיכונים והזדמנויות מעניינים בנתונים המצורפים. "
+        "הניתוח שלך מבוסס *אך ורק* על נתוני המחיר, הרווח/הפסד ושווי השוק שסופקו. אין לך גישה לחדשות או נתונים פונדמנטליים."
+        "\n\n"
+        "**חשוב מאוד: אסור לך לתת המלצות קנייה או מכירה ספציפיות (כגון 'כדאי לקנות X' או 'צריך למכור Y').**"
+        "\n\n"
+        "במקום זאת, ספק 2-3 'נקודות למחשבה' בעברית, בפורמט של בולטים (bullet points)."
+        "התמקד ב: "
+        "1. זיהוי מניה מהתיק של המשתמש שחוותה תנודה חריפה (לטובה או לרעה) ומה כדאי לו לבדוק לגביה."
+        "2. זיהוי מניה מרשימת 'היורדות הגדולות' שעשויה להוות 'הזדמנות מעניינת למחקר נוסף' (למשל, מניה גדולה (Big Cap) שירדה בחדות)."
+        "3. תובנה כללית על ביצועי התיק ביחס לשוק."
+        "\n\n"
+        "התשובה חייבת להיות בעברית."
+    )
+
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-preview-05-2024:generateContent?key={GEMINI_API_KEY}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt_data}]
+        }],
+        "systemInstruction": {
+            "parts": [{"text": system_instruction}]
+        }
+    }
+
+    try:
+        response = requests.post(api_url, headers={"Content-Type": "application/json"}, data=json.dumps(payload), timeout=20)
+        response.raise_for_status() 
+        
+        result = response.json()
+        
+        if 'candidates' in result and result['candidates']:
+            text = result['candidates'][0]['content']['parts'][0]['text']
+            
+            # Convert markdown bullets (*) to HTML lists
+            formatted_text = text.replace('* ', '<li>')
+            formatted_text = formatted_text.replace('\n', '</li>')
+            # Ensure the last item is closed
+            if '<li>' in formatted_text:
+                 formatted_text += '</li>'
+                 
+            html_output = f"<ul>{formatted_text}</ul>"
+            
+            html_output += "<p style='font-size: 0.7em; color: #666; font-style: italic;'><b>כתב ויתור:</b> ניתוח AI זה מיועד למטרות מידע בלבד ואינו מהווה ייעוץ פיננסי. בצע מחקר משלך לפני קבלת החלטות.</p>"
+            return html_output
+        else:
+            print("Gemini API (Insights) returned no candidates.")
+            return "<p><i>(ניתוח AI לא החזיר תגובה.)</i></p>"
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error calling Gemini API (Insights): {e}")
+        return f"<p><i>(שגיאה בקבלת ניתוח AI: {e})</i></p>"
+    except Exception as e:
+        print(f"Error processing Gemini (Insights) response: {e}")
+        traceback.print_exc()
+        return "<p><i>(שגיאה בעיבוד ניתוח AI.)</i></p>"
+
 
 # --- UPDATED FUNCTION: generate_html_report ---
-def generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html, total_daily_p_l_ils):
+# --- (Now accepts gemini_insights_html) ---
+def generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html, gemini_insights_html, total_daily_p_l_ils):
     """ Generates a complete HTML report string. """
     today = datetime.now().strftime("%B %d, %Y")
     
@@ -346,6 +439,21 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
             .gemini-section h2 {{ margin-top: 0; color: #d98c00; }}
             .gemini-section p {{ font-size: 1.1em; line-height: 1.6; }}
 
+            /* $$$$ NEW: Insights Section Style $$$$ */
+            .insights-section {{ 
+                background-color: #f3f0ff; 
+                border: 2px solid #6c48bb; 
+                padding: 15px; 
+                border-radius: 8px; 
+                margin-top: 20px;
+                direction: rtl; /* Set text direction to RTL for this section */
+                text-align: right; /* Align text to the right */
+            }}
+            .insights-section h2 {{ margin-top: 0; color: #5a3e9b; }}
+            .insights-section ul {{ padding-right: 20px; }} /* Add padding for RTL list */
+            .insights-section li {{ font-size: 1.1em; line-height: 1.6; margin-bottom: 10px; }}
+
+
             .alert-section h2 {{ margin-top: 0; color: #d9534f; }}
             .info-section h2 {{ margin-top: 0; color: #4a90e2; }}
             .success-section h2 {{ margin-top: 0; color: #48bb78; }}
@@ -354,13 +462,16 @@ def generate_html_report(portfolio_details, general_market_losers, general_marke
     <body>
         <h1>Daily Stock Report - {today}</h1>
 
-    <!-- --- NEW: Gemini Analysis Section --- -->
     <div class='gemini-section'>
-        <h2>🤖 AI Financial Summary</h2>
+        <h2>🤖 AI Financial Summary (English)</h2>
         {gemini_analysis_html}
     </div>
 
-    <!-- --- Personal Alerts Section --- -->
+    <div class'insights-section'>
+        <h2>💡 תובנות אנליסט (AI)</h2>
+        {gemini_insights_html}
+    </div>
+
     """
     
     # --- Personal Alerts Section ---
@@ -497,7 +608,7 @@ def send_email(html_body):
     today = datetime.now().strftime("%Y-%m-%d")
     msg = MIMEMultipart("alternative")
     # --- UPDATED SUBJECT ---
-    msg["Subject"] = f"📈 Daily Stock Report (with AI Summary) - {today}"
+    msg["Subject"] = f"📈 Daily Stock Report (with AI Summary & Insights) - {today}"
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECIPIENT_EMAIL
     
@@ -635,7 +746,7 @@ def check_portfolio_and_report():
                             "prev_close": prev_close,
                             "daily_change_pct": daily_change_pct,
                             "total_change_pct": total_change_pct,
-                            "num_shares": num_shares,    # <-- NEW
+                            "num_shares": num_shares,     # <-- NEW
                             "daily_p_l": daily_p_l_ils,  # <-- Storing ILS value
                             "total_p_l": total_p_l_ils   # <-- Storing ILS value
                         }
@@ -663,15 +774,25 @@ def check_portfolio_and_report():
 
     # --- NEW: Get Gemini Analysis (now passing total P/L in ILS) ---
     gemini_analysis_html = get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers, total_portfolio_daily_p_l_ils)
+    
+    # --- $$$$ NEW: Get Gemini Insights $$$$ ---
+    gemini_insights_html = get_gemini_insights(portfolio_details, general_market_losers, general_market_gainers, total_portfolio_daily_p_l_ils)
     # --- End ---
 
     if not portfolio_details and not general_market_losers and not general_market_gainers:
         print("No portfolio details or general market movers to report.")
         return
 
-    # --- Report Generation and Sending (now passing total P/L in ILS) ---
+    # --- Report Generation and Sending (now passing total P/L in ILS and insights) ---
     print("\nGenerating HTML report...")
-    html_report = generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html, total_portfolio_daily_p_l_ils)
+    html_report = generate_html_report(
+        portfolio_details, 
+        general_market_losers, 
+        general_market_gainers, 
+        gemini_analysis_html, 
+        gemini_insights_html,  # <-- Pass new insights
+        total_portfolio_daily_p_l_ils
+    )
     
     report_filename = "daily_stock_report.html"
     try:
