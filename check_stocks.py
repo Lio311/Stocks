@@ -253,7 +253,7 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
         "Finally, add a 1-sentence comment on the general market scan. "
         "Keep the entire response to 3-4 sentences total."
     )
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [{
