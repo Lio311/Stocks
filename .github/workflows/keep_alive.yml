@@ -11,17 +11,21 @@ jobs:
   wake-apps:
     runs-on: ubuntu-latest
     steps:
-      - name: Send HTTP Request to Apps
+      - name: Send HTTP GET Request to Apps
+        # שימוש ב-GET מלא (כמו דפדפן)
+        # -o /dev/null : שולח את פלט ה-HTML ל"חור שחור" (לא שומר אותו)
+        # -s : מצב שקט
+        # --fail : גורם לפקודה להיכשל אם השרת מחזיר שגיאה
         run: |
-          echo "Pinging 8 apps to keep them alive..."
+          echo "Pinging 8 apps with full GET request..."
           
-          curl -s --head --fail "https://liostocks.streamlit.app"
-          curl -s --head --fail "https://fourieropticssimulator.streamlit.app"
-          curl -s --head --fail "https://rppgvitalsanalyzer.streamlit.app"
-          curl -s --head --fail "https://gaitanalysis3.streamlit.app"
-          curl -s --head --fail "https://ecgarrhythmiasimulator.streamlit.app"
-          curl -s --head --fail "https://ringsimulator.streamlit.app"
-          curl -s --head --fail "https://physiosimulator.streamlit.app"
-          curl -s --head --fail "https://smartriagegantt.streamlit.app"
+          curl -s --fail -o /dev/null "https://liostocks.streamlit.app"
+          curl -s --fail -o /dev/null "https://fourieropticssimulator.streamlit.app"
+          curl -s --fail -o /dev/null "https://rppgvitalsanalyzer.streamlit.app"
+          curl -s --fail -o /dev/null "https://gaitanalysis3.streamlit.app"
+          curl -s --fail -o /dev/null "https://ecgarrhythmiasimulator.streamlit.app"
+          curl -s --fail -o /dev/null "https://ringsimulator.streamlit.app"
+          curl -s --fail -o /dev/null "https://physiosimulator.streamlit.app"
+          curl -s --fail -o /dev/null "https://smartriagegantt.streamlit.app"
           
           echo "Ping complete. Apps should be awake."
