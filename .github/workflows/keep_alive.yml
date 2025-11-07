@@ -2,10 +2,10 @@ name: Keep Streamlit Apps Alive (with Selenium)
 
 on:
   schedule:
-    # הרצה כל 45 דקות
+    # Run every 45 minutes
     - cron: '*/45 * * * *'
   workflow_dispatch:
-    # מאפשר הרצה ידנית לצרכי בדיקה
+    # Allows manual run for testing purposes
 
 jobs:
   wake-apps-matrix:
@@ -25,25 +25,25 @@ jobs:
           - "https://smartriagegantt.streamlit.app"
 
     steps:
-      # 1. שכפול ה-Repo (כדי לקבל גישה לסקריפט הפייתון)
+      # 1. Check out the Repo (to get access to the Python script)
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # 2. התקנת פייתון
+      # 2. Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # 3. התקנת דפדפן כרום ו-WebDriver (הדרך הנכונה)
-      #    זה מחליף את הפקודה apt-get הקודמת
+      # 3. Set up Chrome Browser & WebDriver (the correct way)
+      #    This replaces the previous apt-get command
       - name: Set up Chrome & ChromeDriver
         uses: browser-actions/setup-chrome@v1
       
-      # 4. התקנת ספריות פייתון (סלניום)
+      # 4. Install Python dependencies (Selenium)
       - name: Install Python dependencies
         run: pip install selenium
 
-      # 5. הרצת סקריפט הפייתון
+      # 5. Run the Python script
       - name: Run wake-up script for ${{ matrix.app_url }}
         run: python wake_app.py ${{ matrix.app_url }}
