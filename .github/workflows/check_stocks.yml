@@ -2,15 +2,15 @@ name: Check Stock Portfolio
 
 on:
   schedule:
-    # מריץ ב-14:32 UTC (שזה 16:32 שעון ישראל, UTC+2)
+    # Runs at 14:32 UTC (which is 16:32 Israel time, UTC+2)
     - cron: "32 14 * * 1-5"
-    # מריץ ב-20:00 UTC (שזה 22:00 שעון ישראל, UTC+2)
+    # Runs at 20:00 UTC (which is 22:00 Israel time, UTC+2)
     - cron: "0 20 * * 1-5"
-  workflow_dispatch: # מוסיף כפתור הרצה ידנית
+  workflow_dispatch: # Adds a manual run button
 
 jobs:
   run-stock-check:
-    runs-on: ubuntu-latest # מריץ על שרת לינוקס חינמי
+    runs-on: ubuntu-latest # Runs on a free Linux server
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          # מתקין את הספריות הנדרשות עבור Gemini וקריאת ויקיפדיה
+          # Installs required libraries for Gemini and reading Wikipedia
           pip install requests lxml
 
       - name: Run stock check script
@@ -31,8 +31,8 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          # מושך את המפתח של ג'מיני שהוספת ל-Secrets
+          # Pulls the Gemini API key you added to Secrets
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         
-        # מריץ את קובץ הפייתון הראשי שלך
+        # Runs your main Python file
         run: python check_stocks.py
