@@ -241,31 +241,32 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     
     st.markdown("### Portfolio Performance (USD $)")
     
-    # Row 1: Per-Share Metrics
+    # --- Row 1: Per-Share Metrics ---
     col1, col2, col3, col4 = st.columns(4)
     
+    # Column 1: Cost Price (Display cost per share)
+    col1.metric("Cost Price (Per Share)", f"${cost_price_usd:,.2f}") 
+
+    # Column 2: Current Price + Fix for Red Arrow on decline
     if change_abs_per_share < 0:
+        # If negative: Place the minus sign BEFORE the dollar sign (e.g., -$2.89)
+        # This fixes the green arrow issue; Streamlit will now show a red arrow.
         delta_str = f"-${abs(change_abs_per_share):,.2f}"
     else:
+        # If positive: Standard format (e.g., $2.89)
         delta_str = f"${change_abs_per_share:,.2f}"
 
     col2.metric("Current Price (Per Share)", f"${current_price_usd:,.2f}", delta=delta_str)
+
+    # Column 3: Percentage Change
     if change_pct_per_share >= 0:
         delta_label_pct = f"+{change_pct_per_share:.2f}%"
     else:
         delta_label_pct = f"{change_pct_per_share:.2f}%"
+        
     col3.metric("Change (%)", delta_label_pct, delta_color="normal")
 
-    # Calculate the actual data period for display
-    time_delta = data_raw.index[-1] - data_raw.index[0]
-    if time_delta.days > 365:
-        display_period = f"{time_delta.days // 365}Y"
-    elif time_delta.days > 30:
-        display_period = f"{time_delta.days // 30}M"
-    elif time_delta.days >= 7:
-        display_period = f"{time_delta.days // 7}W"
-    else:
-        display_period = f"{time_delta.days}D"
+    # Column 4: Data Period (e.g., 1Y, 6M)
     col4.metric("Data Period", display_period)
 
     # Row 2: Total Position Metrics (using custom HTML for styling)
