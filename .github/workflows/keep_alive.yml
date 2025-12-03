@@ -24,7 +24,7 @@ jobs:
           - "https://physiosimulator.streamlit.app"
           - "https://smartriagegantt.streamlit.app"
           - "https://perfumegenerator.streamlit.app/"
-          - "https://dentalcarriesdetector.streamlit.app/"
+          - "https://dental-carries-detector.streamlit.app/"
 
     steps:
       # 1. Check out the Repo (to get access to the Python script)
