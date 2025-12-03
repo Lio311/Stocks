@@ -244,9 +244,12 @@ def plot_advanced_stock_graph(ticker, cost_price_ils, stock_quantity, stock_name
     # Row 1: Per-Share Metrics
     col1, col2, col3, col4 = st.columns(4)
     
-    col1.metric("Cost Price (Per Share)", f"${cost_price_usd:,.2f}") 
-    col2.metric("Current Price (Per Share)", f"${current_price_usd:,.2f}", delta=f"${change_abs_per_share_rounded:,.2f}")
+    if change_abs_per_share < 0:
+        delta_str = f"-${abs(change_abs_per_share):,.2f}"
+    else:
+        delta_str = f"${change_abs_per_share:,.2f}"
 
+    col2.metric("Current Price (Per Share)", f"${current_price_usd:,.2f}", delta=delta_str)
     if change_pct_per_share >= 0:
         delta_label_pct = f"+{change_pct_per_share:.2f}%"
     else:
