@@ -10,6 +10,7 @@ from datetime import datetime
 import traceback
 import requests # For Gemini
 import json # For Gemini
+import time # <--- Added for sleep/delays
 
 # --- Configuration ---
 PORTFOLIO_FILE = 'תיק מניות.xlsx'
@@ -127,6 +128,10 @@ def get_general_market_movers():
             try:
                 data = yf.download(batch, period="2d", progress=False, auto_adjust=False, threads=True)
                 
+                # --- Small sleep to be nice to Yahoo Finance ---
+                time.sleep(1) 
+                # -----------------------------------------------
+
                 if data.empty or len(data) < 2:
                     continue
                 
@@ -764,8 +769,15 @@ def check_portfolio_and_report():
     general_market_losers, general_market_gainers = get_general_market_movers()
 
     # Get Gemini AI Analysis
+    print("Fetching Gemini Analysis...")
     gemini_analysis_html = get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers, total_portfolio_daily_p_l_ils)
     
+    # --- ADDED SLEEP TO PREVENT 429 ERROR ---
+    print("Waiting 15 seconds to avoid Gemini Rate Limit...")
+    time.sleep(15)
+    # ----------------------------------------
+
+    print("Fetching Gemini Insights...")
     gemini_insights_html = get_gemini_insights(portfolio_details, general_market_losers, general_market_gainers, total_portfolio_daily_p_l_ils)
 
     if not portfolio_details and not general_market_losers and not general_market_gainers:
