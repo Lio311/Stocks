@@ -264,7 +264,7 @@ def get_gemini_analysis(portfolio_details, general_market_losers, general_market
         "Keep the entire response to 3-4 sentences total."
     )
 
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key={GEMINI_API_KEY}"
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [{
@@ -345,7 +345,7 @@ def get_gemini_insights(portfolio_details, general_market_losers, general_market
         "The response MUST be in ENGLISH."
     )
 
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key={GEMINI_API_KEY}"
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [{
