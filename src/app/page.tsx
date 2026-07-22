@@ -334,7 +334,7 @@ export default function PortfolioTracker() {
   };
 
   return (
-    <div className="relative min-h-screen text-slate-100 p-4 md:p-8" dir="rtl" ref={containerRef}>
+    <div className="relative min-h-screen text-foreground p-4 md:p-8" dir="rtl" ref={containerRef}>
       <div className="bg-animation"></div>
 
       <div className="container max-w-6xl mx-auto relative z-10 space-y-8">
@@ -345,7 +345,7 @@ export default function PortfolioTracker() {
               <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400">
                 מעקב תיק מניות
               </h1>
-              <p className="text-sm text-slate-400 mt-1 flex items-center gap-2">
+              <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
                 <RefreshCcw className="w-3 h-3" /> שער הדולר: ₪{usdIlsRate.toFixed(2)}
               </p>
             </div>
@@ -354,20 +354,20 @@ export default function PortfolioTracker() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="anim-card glass-card">
+          <Card className="anim-card shadow-lg border">
             <CardContent className="p-6">
               <div className="flex justify-between items-start mb-4">
-                <span className="text-slate-400 font-medium">שווי תיק</span>
+                <span className="text-muted-foreground font-medium">שווי תיק</span>
                 <Wallet className="w-5 h-5 text-blue-500" />
               </div>
-              <div className="text-xs text-slate-500 mb-1">{fmtIls(totalIlsVal)} + {fmtUsd(totalUsdVal)}</div>
-              <div className="text-3xl font-bold text-white">{fmtIls(combinedTotal)}</div>
+              <div className="text-xs text-muted-foreground mb-1">{fmtIls(totalIlsVal)} + {fmtUsd(totalUsdVal)}</div>
+              <div className="text-3xl font-bold text-foreground">{fmtIls(combinedTotal)}</div>
             </CardContent>
           </Card>
-          <Card className="anim-card glass-card">
+          <Card className="anim-card shadow-lg border">
             <CardContent className="p-6">
               <div className="flex justify-between items-start mb-4">
-                <span className="text-slate-400 font-medium">רווח/הפסד</span>
+                <span className="text-muted-foreground font-medium">רווח/הפסד</span>
                 <ArrowUpRight className={`w-5 h-5 ${gain >= 0 ? "text-emerald-500" : "text-red-500"}`} />
               </div>
               <div className="text-3xl font-bold" style={{ color: gain >= 0 ? "#10b981" : "#ef4444" }}>
@@ -375,10 +375,10 @@ export default function PortfolioTracker() {
               </div>
             </CardContent>
           </Card>
-          <Card className="anim-card glass-card">
+          <Card className="anim-card shadow-lg border">
             <CardContent className="p-6">
               <div className="flex justify-between items-start mb-4">
-                <span className="text-slate-400 font-medium">אחוז שינוי</span>
+                <span className="text-muted-foreground font-medium">אחוז שינוי</span>
                 <Percent className={`w-5 h-5 ${gain >= 0 ? "text-emerald-500" : "text-red-500"}`} />
               </div>
               <div className="text-3xl font-bold" style={{ color: gain >= 0 ? "#10b981" : "#ef4444" }}>
@@ -390,9 +390,9 @@ export default function PortfolioTracker() {
 
         {/* Inputs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 anim-card">
-          <Card className="glass-card">
+          <Card className="shadow-lg border">
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2 text-white">
+              <CardTitle className="text-lg flex items-center gap-2 text-foreground">
                 <FileSpreadsheet className="w-5 h-5 text-blue-400" /> יבוא מ-Excel
               </CardTitle>
             </CardHeader>
@@ -400,13 +400,13 @@ export default function PortfolioTracker() {
               <div className="flex items-center gap-4">
                 <Input type="file" accept=".xlsx, .xls" onChange={handleImportExcel} className="bg-slate-900/50 border-slate-700" />
               </div>
-              <p className="text-xs text-slate-500 mt-2">הקובץ צריך לכלול עמודות: טיקר, כמות, מחיר (או דומות)</p>
+              <p className="text-xs text-muted-foreground mt-2">הקובץ צריך לכלול עמודות: טיקר, כמות, מחיר (או דומות)</p>
             </CardContent>
           </Card>
 
-          <Card className="glass-card">
+          <Card className="shadow-lg border">
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2 text-white">
+              <CardTitle className="text-lg flex items-center gap-2 text-foreground">
                 <PlusCircle className="w-5 h-5 text-indigo-400" /> הוסף מניה ידנית
               </CardTitle>
             </CardHeader>
@@ -415,34 +415,34 @@ export default function PortfolioTracker() {
                 <Input placeholder="סימול (AAPL)" value={newTicker} onChange={(e) => setNewTicker(e.target.value)} className="bg-slate-900/50 border-slate-700" />
                 <Input type="number" placeholder="כמות" value={newShares} onChange={(e) => setNewShares(e.target.value)} className="bg-slate-900/50 border-slate-700 w-24" />
                 <Input type="number" placeholder="מחיר קנייה" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} className="bg-slate-900/50 border-slate-700 w-28" />
-                <Button onClick={handleAddStock} className="bg-blue-600 hover:bg-blue-700 text-white">הוסף</Button>
+                <Button onClick={handleAddStock} className="bg-blue-600 hover:bg-blue-700 text-foreground">הוסף</Button>
               </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Portfolio Table */}
-        <Card className="anim-card glass-card">
+        <Card className="anim-card shadow-lg border">
           <CardHeader>
-            <CardTitle className="text-xl flex items-center gap-2 text-white">
+            <CardTitle className="text-xl flex items-center gap-2 text-foreground">
               <List className="w-5 h-5 text-blue-400" /> התיק שלי
             </CardTitle>
           </CardHeader>
           <CardContent>
             {portfolio.length === 0 ? (
-              <div className="text-center py-12 text-slate-500">התיק ריק. יבא קובץ Excel או הוסף מניות ידנית.</div>
+              <div className="text-center py-12 text-muted-foreground">התיק ריק. יבא קובץ Excel או הוסף מניות ידנית.</div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="border-slate-800 hover:bg-transparent">
-                      <TableHead className="text-right text-slate-400">סימול</TableHead>
-                      <TableHead className="text-right text-slate-400">כמות</TableHead>
-                      <TableHead className="text-right text-slate-400">מחיר רכישה</TableHead>
-                      <TableHead className="text-right text-slate-400">מחיר נוכחי</TableHead>
-                      <TableHead className="text-right text-slate-400">רווח/הפסד</TableHead>
-                      <TableHead className="text-right text-slate-400">%</TableHead>
-                      <TableHead className="text-right text-slate-400"></TableHead>
+                      <TableHead className="text-right text-muted-foreground">סימול</TableHead>
+                      <TableHead className="text-right text-muted-foreground">כמות</TableHead>
+                      <TableHead className="text-right text-muted-foreground">מחיר רכישה</TableHead>
+                      <TableHead className="text-right text-muted-foreground">מחיר נוכחי</TableHead>
+                      <TableHead className="text-right text-muted-foreground">רווח/הפסד</TableHead>
+                      <TableHead className="text-right text-muted-foreground">%</TableHead>
+                      <TableHead className="text-right text-muted-foreground"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -455,17 +455,17 @@ export default function PortfolioTracker() {
                       return (
                         <TableRow 
                           key={i} 
-                          className="border-slate-800 hover:bg-slate-800/50 cursor-pointer transition-colors"
+                          className="border-slate-800 hover:bg-background cursor-pointer transition-colors"
                           onClick={() => setSelectedStock(stock)}
                         >
-                          <TableCell className="font-semibold text-white">{stock.ticker} <span className="text-slate-500 text-xs font-normal">({stock.currency})</span></TableCell>
+                          <TableCell className="font-semibold text-foreground">{stock.ticker} <span className="text-muted-foreground text-xs font-normal">({stock.currency})</span></TableCell>
                           <TableCell>{stock.shares}</TableCell>
                           <TableCell dir="ltr" className="text-right">{sym}{stock.buyPrice.toFixed(2)}</TableCell>
                           <TableCell dir="ltr" className="text-right">{sym}{stock.currentPrice.toFixed(2)}</TableCell>
                           <TableCell dir="ltr" className={`text-right ${color}`}>{stockGain >= 0 ? "+" : ""}{sym}{Math.abs(stockGain).toFixed(2)}</TableCell>
                           <TableCell dir="ltr" className={`text-right ${color}`}>{stockGainPercent >= 0 ? "+" : ""}{stockGainPercent.toFixed(2)}%</TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="icon" className="text-slate-500 hover:text-red-500 hover:bg-red-500/10" onClick={(e) => { e.stopPropagation(); removeStock(i); }}>
+                            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10" onClick={(e) => { e.stopPropagation(); removeStock(i); }}>
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </TableCell>
@@ -482,49 +482,49 @@ export default function PortfolioTracker() {
 
       {/* Detail View Dialog */}
       <Dialog open={!!selectedStock} onOpenChange={(open) => !open && setSelectedStock(null)}>
-        <DialogContent className="max-w-4xl bg-slate-900 border-slate-700 text-slate-100 p-6 md:p-8 rounded-2xl shadow-2xl" dir="rtl">
+        <DialogContent className="max-w-4xl bg-slate-900 border-slate-700 text-foreground p-6 md:p-8 rounded-2xl shadow-2xl" dir="rtl">
           {selectedStock && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-2xl font-bold flex items-center gap-2 text-white">
+                <DialogTitle className="text-2xl font-bold flex items-center gap-2 text-foreground">
                   <TrendingUp className="w-6 h-6 text-blue-500" /> {selectedStock.ticker} 
-                  <span className="text-sm text-slate-400 font-normal bg-slate-800 px-2 py-1 rounded">
+                  <span className="text-sm text-muted-foreground font-normal bg-background px-2 py-1 rounded">
                     {selectedStock.dataSource === "excel" ? "נתוני EXCEL" : "ידני"}
                   </span>
                 </DialogTitle>
               </DialogHeader>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-                  <div className="text-sm text-slate-400 mb-1">מחיר עלות</div>
-                  <div className="text-xl font-semibold text-white">{selectedStock.currency === "ILS" ? "₪" : "$"}{selectedStock.buyPrice.toFixed(2)}</div>
+                <div className="bg-background p-4 rounded-xl border border-border">
+                  <div className="text-sm text-muted-foreground mb-1">מחיר עלות</div>
+                  <div className="text-xl font-semibold text-foreground">{selectedStock.currency === "ILS" ? "₪" : "$"}{selectedStock.buyPrice.toFixed(2)}</div>
                 </div>
-                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-                  <div className="text-sm text-slate-400 mb-1">מחיר נוכחי</div>
-                  <div className="text-xl font-semibold text-white">{selectedStock.currency === "ILS" ? "₪" : "$"}{selectedStock.currentPrice.toFixed(2)}</div>
+                <div className="bg-background p-4 rounded-xl border border-border">
+                  <div className="text-sm text-muted-foreground mb-1">מחיר נוכחי</div>
+                  <div className="text-xl font-semibold text-foreground">{selectedStock.currency === "ILS" ? "₪" : "$"}{selectedStock.currentPrice.toFixed(2)}</div>
                 </div>
-                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-                  <div className="text-sm text-slate-400 mb-1">תשואה</div>
+                <div className="bg-background p-4 rounded-xl border border-border">
+                  <div className="text-sm text-muted-foreground mb-1">תשואה</div>
                   <div className={`text-xl font-bold ${selectedStock.currentPrice >= selectedStock.buyPrice ? "text-emerald-500" : "text-red-500"}`} dir="ltr">
                     {selectedStock.currentPrice >= selectedStock.buyPrice ? "+" : ""}
                     {(((selectedStock.currentPrice - selectedStock.buyPrice) / selectedStock.buyPrice) * 100).toFixed(2)}%
                   </div>
                 </div>
-                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-                  <div className="text-sm text-slate-400 mb-1">כמות</div>
-                  <div className="text-xl font-semibold text-white">{selectedStock.shares}</div>
+                <div className="bg-background p-4 rounded-xl border border-border">
+                  <div className="text-sm text-muted-foreground mb-1">כמות</div>
+                  <div className="text-xl font-semibold text-foreground">{selectedStock.shares}</div>
                 </div>
               </div>
 
-              <div className="mt-8 border border-slate-700/50 bg-slate-800/30 rounded-xl p-6">
+              <div className="mt-8 border border-border bg-background/30 rounded-xl p-6">
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-semibold text-lg flex items-center gap-2 text-white"><LineChart className="w-5 h-5 text-indigo-400" /> גרף מחירים</h3>
+                  <h3 className="font-semibold text-lg flex items-center gap-2 text-foreground"><LineChart className="w-5 h-5 text-indigo-400" /> גרף מחירים</h3>
                   <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-700">
                     {["1w", "1mo", "3mo", "6mo", "1y"].map((p) => (
                       <button 
                         key={p} 
                         onClick={() => setChartPeriod(p)}
-                        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${chartPeriod === p ? "bg-blue-600 text-white font-medium shadow-sm" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${chartPeriod === p ? "bg-blue-600 text-foreground font-medium shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-background"}`}
                       >
                         {p}
                       </button>
@@ -537,25 +537,25 @@ export default function PortfolioTracker() {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                <div className="flex items-center gap-4 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                <div className="flex items-center gap-4 bg-background/30 p-4 rounded-xl border border-border">
                   <div className="p-2 bg-blue-500/10 rounded-lg"><Coins className="text-blue-500 w-6 h-6" /></div>
                   <div>
-                    <div className="text-xs text-slate-400 mb-0.5">מטבע</div>
-                    <div className="font-medium text-slate-200">{selectedStock.currency === "ILS" ? "שקל ישראלי (₪)" : "דולר אמריקאי ($)"}</div>
+                    <div className="text-xs text-muted-foreground mb-0.5">מטבע</div>
+                    <div className="font-medium text-foreground">{selectedStock.currency === "ILS" ? "שקל ישראלי (₪)" : "דולר אמריקאי ($)"}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                <div className="flex items-center gap-4 bg-background/30 p-4 rounded-xl border border-border">
                   <div className="p-2 bg-blue-500/10 rounded-lg"><Calendar className="text-blue-500 w-6 h-6" /></div>
                   <div>
-                    <div className="text-xs text-slate-400 mb-0.5">עדכון אחרון</div>
-                    <div className="font-medium text-slate-200">{new Date().toLocaleDateString("he-IL")}</div>
+                    <div className="text-xs text-muted-foreground mb-0.5">עדכון אחרון</div>
+                    <div className="font-medium text-foreground">{new Date().toLocaleDateString("he-IL")}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                <div className="flex items-center gap-4 bg-background/30 p-4 rounded-xl border border-border">
                   <div className="p-2 bg-blue-500/10 rounded-lg"><RefreshCcw className="text-blue-500 w-6 h-6" /></div>
                   <div>
-                    <div className="text-xs text-slate-400 mb-0.5">שער המרה</div>
-                    <div className="font-medium text-slate-200" dir="ltr">$1 = ₪{usdIlsRate.toFixed(2)}</div>
+                    <div className="text-xs text-muted-foreground mb-0.5">שער המרה</div>
+                    <div className="font-medium text-foreground" dir="ltr">$1 = ₪{usdIlsRate.toFixed(2)}</div>
                   </div>
                 </div>
               </div>
@@ -566,4 +566,5 @@ export default function PortfolioTracker() {
     </div>
   );
 }
+
 
