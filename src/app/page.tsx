@@ -398,7 +398,7 @@ export default function PortfolioTracker() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
-                <Input type="file" accept=".xlsx, .xls" onChange={handleImportExcel} className="bg-slate-900/50 border-slate-700" />
+                <Input type="file" accept=".xlsx, .xls" onChange={handleImportExcel} className="bg-background border-border flex-1" />
               </div>
               <p className="text-xs text-muted-foreground mt-2">הקובץ צריך לכלול עמודות: טיקר, כמות, מחיר (או דומות)</p>
             </CardContent>
@@ -412,9 +412,9 @@ export default function PortfolioTracker() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-2">
-                <Input placeholder="סימול (AAPL)" value={newTicker} onChange={(e) => setNewTicker(e.target.value)} className="bg-slate-900/50 border-slate-700" />
-                <Input type="number" placeholder="כמות" value={newShares} onChange={(e) => setNewShares(e.target.value)} className="bg-slate-900/50 border-slate-700 w-24" />
-                <Input type="number" placeholder="מחיר קנייה" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} className="bg-slate-900/50 border-slate-700 w-28" />
+                <Input placeholder="סימול (AAPL)" value={newTicker} onChange={(e) => setNewTicker(e.target.value)} className="bg-background border-border flex-1" />
+                <Input type="number" placeholder="כמות" value={newShares} onChange={(e) => setNewShares(e.target.value)} className="bg-background border-border flex-1 min-w-[80px]" />
+                <Input type="number" placeholder="מחיר קנייה" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} className="bg-background border-border flex-1 min-w-[100px]" />
                 <Button onClick={handleAddStock} className="bg-blue-600 hover:bg-blue-700 text-foreground">הוסף</Button>
               </div>
             </CardContent>
@@ -482,7 +482,7 @@ export default function PortfolioTracker() {
 
       {/* Detail View Dialog */}
       <Dialog open={!!selectedStock} onOpenChange={(open) => !open && setSelectedStock(null)}>
-        <DialogContent className="max-w-4xl bg-slate-900 border-slate-700 text-foreground p-6 md:p-8 rounded-2xl shadow-2xl" dir="rtl">
+        <DialogContent className="max-w-4xl bg-background border-border text-foreground p-6 md:p-8 rounded-2xl shadow-2xl" dir="rtl">
           {selectedStock && (
             <>
               <DialogHeader>
@@ -519,7 +519,7 @@ export default function PortfolioTracker() {
               <div className="mt-8 border border-border bg-background/30 rounded-xl p-6">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="font-semibold text-lg flex items-center gap-2 text-foreground"><LineChart className="w-5 h-5 text-indigo-400" /> גרף מחירים</h3>
-                  <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-700">
+                  <div className="flex gap-1 bg-muted p-1 rounded-lg border border-border">
                     {["1w", "1mo", "3mo", "6mo", "1y"].map((p) => (
                       <button 
                         key={p} 
@@ -566,6 +566,8 @@ export default function PortfolioTracker() {
     </div>
   );
 }
+
+
 
 
 
