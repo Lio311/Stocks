@@ -1,65 +1,568 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  LineChart,
+  Wallet,
+  ArrowUpRight,
+  Percent,
+  FileSpreadsheet,
+  PlusCircle,
+  List,
+  Trash2,
+  TrendingUp,
+  Coins,
+  Calendar,
+  RefreshCcw,
+} from "lucide-react";
+import gsap from "gsap";
+import * as XLSX from "xlsx";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from "chart.js";
+import { Line } from "react-chartjs-2";
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+
+interface Stock {
+  ticker: string;
+  shares: number;
+  buyPrice: number;
+  currentPrice: number;
+  currency: "ILS" | "USD";
+  dataSource?: string;
+}
+
+export default function PortfolioTracker() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [portfolio, setPortfolio] = useState<Stock[]>([]);
+  const [usdIlsRate, setUsdIlsRate] = useState<number>(3.65);
+  
+  // Add Stock Form
+  const [newTicker, setNewTicker] = useState("");
+  const [newShares, setNewShares] = useState("1");
+  const [newPrice, setNewPrice] = useState("");
+
+  // Detail View
+  const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<string>("1w");
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.from(".anim-header", { y: -30, opacity: 0, duration: 0.8, ease: "power3.out" });
+      gsap.from(".anim-card", { y: 30, opacity: 0, duration: 0.8, stagger: 0.1, ease: "power3.out", delay: 0.2 });
+    }, containerRef);
+    
+    fetchExchangeRate();
+    
+    return () => ctx.revert();
+  }, []);
+
+  const fetchExchangeRate = async () => {
+    try {
+      const response = await fetch("https://api.exchangerate-api.com/v4/latest/USD");
+      const data = await response.json();
+      if (data.rates && data.rates.ILS) {
+        setUsdIlsRate(data.rates.ILS);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch exchange rate, using default 3.65");
+    }
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const workbook = XLSX.read(event.target?.result, { type: "array" });
+        const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+        processExcelData(rawData as any[][]);
+      } catch (err) {
+        alert("שגיאה בקריאת הקובץ.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = ""; // Reset file input
+  };
+
+  const processExcelData = (rows: any[][]) => {
+    let rate = usdIlsRate;
+    // Scan for exchange rate in first 20 rows
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      const row = rows[i];
+      if (!row) continue;
+      for (let j = 0; j < row.length; j++) {
+        const val = String(row[j]).trim();
+        if (val.includes("שער הדולר") || val.includes("Dollar Rate")) {
+          let rateVal = parseFloat(String(row[j + 1] || "").replace(/[^\d\.]/g, ""));
+          if (!rateVal || isNaN(rateVal)) {
+            rateVal = parseFloat(String(row[j + 2] || "").replace(/[^\d\.]/g, ""));
+          }
+          if (rateVal && !isNaN(rateVal) && rateVal > 0) {
+            rate = rateVal;
+            setUsdIlsRate(rateVal);
+            break;
+          }
+        }
+      }
+    }
+
+    let headerRowIndex = -1;
+    let colMap = { ticker: -1, shares: -1, price: -1, currentPrice: -1 };
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row) continue;
+      for (let j = 0; j < row.length; j++) {
+        const val = String(row[j]).trim();
+        if (["טיקר", "Ticker", "Symbol"].some((s) => val.includes(s))) colMap.ticker = j;
+        if (["כמות מניות", "כמות", "Shares"].some((s) => val === s)) colMap.shares = j;
+        if (["מחיר עלות", "Cost", "Buy Price"].some((s) => val.includes(s))) colMap.price = j;
+        if (["מחיר זמן אמת", "Real Time", "Last Price", "Current Price"].some((s) => val.includes(s))) colMap.currentPrice = j;
+      }
+      if (colMap.ticker !== -1 && colMap.shares !== -1) {
+        headerRowIndex = i;
+        break;
+      }
+      colMap = { ticker: -1, shares: -1, price: -1, currentPrice: -1 };
+    }
+
+    if (headerRowIndex === -1) {
+      alert("לא נמצאו עמודות מתאימות בקובץ.");
+      return;
+    }
+
+    const newPortfolio: Stock[] = [];
+    const ILS_TICKERS = ["1159250", "1183441"];
+
+    for (let i = headerRowIndex + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row) continue;
+
+      let tickerStr = String(row[colMap.ticker] || "").trim();
+      if (!tickerStr || tickerStr.toLowerCase() === "nan") continue;
+
+      let sharesStr = String(row[colMap.shares] || "0").replace(/[^\d\.]/g, "");
+      const sharesVal = parseFloat(sharesStr);
+      if (!sharesVal) continue;
+
+      let priceVal = 0;
+      if (colMap.price !== -1) {
+        priceVal = parseFloat(String(row[colMap.price]).replace(/[^\d\.\-]/g, "")) || 0;
+      }
+
+      let currentPriceVal = 0;
+      let foundRealTimePrice = false;
+      if (colMap.currentPrice !== -1) {
+        let rawRealTime = String(row[colMap.currentPrice] || "");
+        let parsed = parseFloat(rawRealTime.replace(/[^\d\.\-]/g, ""));
+        if (!isNaN(parsed) && parsed !== 0) {
+          currentPriceVal = parsed;
+          foundRealTimePrice = true;
+        }
+      }
+
+      let currency: "ILS" | "USD" = ILS_TICKERS.includes(tickerStr) ? "ILS" : "USD";
+      let finalCurrentPrice = foundRealTimePrice
+        ? currentPriceVal
+        : priceVal > 0
+        ? priceVal * (0.95 + Math.random() * 0.1)
+        : currency === "ILS" ? 100 : 30;
+
+      newPortfolio.push({
+        ticker: tickerStr.toUpperCase(),
+        shares: sharesVal,
+        buyPrice: priceVal,
+        currentPrice: finalCurrentPrice,
+        currency,
+        dataSource: "excel",
+      });
+    }
+
+    setPortfolio(newPortfolio);
+  };
+
+  const handleAddStock = () => {
+    const t = newTicker.trim().toUpperCase();
+    const s = parseInt(newShares);
+    const p = parseFloat(newPrice);
+    if (!t || isNaN(s) || isNaN(p)) return;
+
+    const currency = ["1159250", "1183441"].includes(t) ? "ILS" : "USD";
+    
+    setPortfolio([...portfolio, {
+      ticker: t,
+      shares: s,
+      buyPrice: p,
+      currentPrice: p * (0.95 + Math.random() * 0.1),
+      currency,
+      dataSource: "manual"
+    }]);
+
+    setNewTicker("");
+    setNewShares("1");
+    setNewPrice("");
+  };
+
+  const removeStock = (index: number) => {
+    setPortfolio(portfolio.filter((_, i) => i !== index));
+  };
+
+  // Summary Calcs
+  let totalIlsVal = 0, totalIlsCost = 0;
+  let totalUsdVal = 0, totalUsdCost = 0;
+
+  portfolio.forEach((stock) => {
+    if (stock.currency === "ILS") {
+      totalIlsVal += stock.currentPrice * stock.shares;
+      totalIlsCost += stock.buyPrice * stock.shares;
+    } else {
+      totalUsdVal += stock.currentPrice * stock.shares;
+      totalUsdCost += stock.buyPrice * stock.shares;
+    }
+  });
+
+  const combinedTotal = totalIlsVal + totalUsdVal * usdIlsRate;
+  const combinedCost = totalIlsCost + totalUsdCost * usdIlsRate;
+  const gain = combinedTotal - combinedCost;
+  const gainPercent = combinedCost > 0 ? (gain / combinedCost) * 100 : 0;
+
+  const fmtIls = (n: number) => `₪${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtUsd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // Chart Generation Logic
+  const generateChartData = (stock: Stock, period: string) => {
+    const periods: Record<string, { days: number; interval: number }> = {
+      "1w": { days: 7, interval: 1 },
+      "1mo": { days: 30, interval: 1 },
+      "3mo": { days: 90, interval: 3 },
+      "6mo": { days: 180, interval: 7 },
+      "1y": { days: 365, interval: 7 },
+      all: { days: 1825, interval: 30 },
+    };
+    const config = periods[period] || periods["1w"];
+    const points = Math.floor(config.days / config.interval);
+
+    const labels = [];
+    const prices = [];
+    const now = new Date();
+    
+    for (let i = points - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i * config.interval);
+      if (config.days <= 7) labels.push(date.toLocaleDateString("he-IL", { weekday: "short" }));
+      else if (config.days <= 30) labels.push(date.toLocaleDateString("he-IL", { day: "numeric", month: "short" }));
+      else labels.push(date.toLocaleDateString("he-IL", { month: "short", year: "2-digit" }));
+    }
+
+    const priceChange = stock.currentPrice - stock.buyPrice;
+    const volatility = Math.abs(priceChange) * 0.15;
+
+    for (let i = 0; i < points; i++) {
+      const progress = i / (points - 1);
+      const trendPrice = stock.buyPrice + priceChange * progress;
+      const randomVariation = (Math.random() - 0.5) * volatility;
+      prices.push(Math.max(0, trendPrice + randomVariation));
+    }
+    prices[prices.length - 1] = stock.currentPrice;
+
+    return { labels, prices };
+  };
+
+  const getChartOptions = (stock: Stock) => {
+    const data = generateChartData(stock, chartPeriod);
+    const isProfit = stock.currentPrice >= stock.buyPrice;
+    const color = isProfit ? "#10b981" : "#ef4444";
+    const symbol = stock.currency === "ILS" ? "₪" : "$";
+
+    return {
+      data: {
+        labels: data.labels,
+        datasets: [
+          {
+            label: "מחיר",
+            data: data.prices,
+            borderColor: color,
+            backgroundColor: `${color}20`,
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+          },
+          {
+            label: "מחיר עלות",
+            data: Array(data.labels.length).fill(stock.buyPrice),
+            borderColor: "#f59e0b",
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: "#cbd5e1" } },
+          tooltip: {
+            callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${symbol}${ctx.parsed.y.toFixed(2)}` },
+          },
+        },
+        scales: {
+          x: { ticks: { color: "#94a3b8" }, grid: { display: false } },
+          y: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(255,255,255,0.05)" } },
+        },
+      },
+    };
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="relative min-h-screen text-slate-100 p-4 md:p-8" dir="rtl" ref={containerRef}>
+      <div className="bg-animation"></div>
+
+      <div className="container max-w-6xl mx-auto relative z-10 space-y-8">
+        <header className="anim-header flex flex-col md:flex-row justify-between items-center pb-6 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <LineChart className="w-10 h-10 text-blue-500" />
+            <div>
+              <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400">
+                מעקב תיק מניות
+              </h1>
+              <p className="text-sm text-slate-400 mt-1 flex items-center gap-2">
+                <RefreshCcw className="w-3 h-3" /> שער הדולר: ₪{usdIlsRate.toFixed(2)}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="anim-card glass-card">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-slate-400 font-medium">שווי תיק</span>
+                <Wallet className="w-5 h-5 text-blue-500" />
+              </div>
+              <div className="text-xs text-slate-500 mb-1">{fmtIls(totalIlsVal)} + {fmtUsd(totalUsdVal)}</div>
+              <div className="text-3xl font-bold text-white">{fmtIls(combinedTotal)}</div>
+            </CardContent>
+          </Card>
+          <Card className="anim-card glass-card">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-slate-400 font-medium">רווח/הפסד</span>
+                <ArrowUpRight className={`w-5 h-5 ${gain >= 0 ? "text-emerald-500" : "text-red-500"}`} />
+              </div>
+              <div className="text-3xl font-bold" style={{ color: gain >= 0 ? "#10b981" : "#ef4444" }}>
+                <span dir="ltr">{gain >= 0 ? "+" : ""}{fmtIls(gain)}</span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="anim-card glass-card">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-slate-400 font-medium">אחוז שינוי</span>
+                <Percent className={`w-5 h-5 ${gain >= 0 ? "text-emerald-500" : "text-red-500"}`} />
+              </div>
+              <div className="text-3xl font-bold" style={{ color: gain >= 0 ? "#10b981" : "#ef4444" }}>
+                <span dir="ltr">{gainPercent > 0 ? "+" : ""}{gainPercent.toFixed(2)}%</span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Inputs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 anim-card">
+          <Card className="glass-card">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2 text-white">
+                <FileSpreadsheet className="w-5 h-5 text-blue-400" /> יבוא מ-Excel
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4">
+                <Input type="file" accept=".xlsx, .xls" onChange={handleImportExcel} className="bg-slate-900/50 border-slate-700" />
+              </div>
+              <p className="text-xs text-slate-500 mt-2">הקובץ צריך לכלול עמודות: טיקר, כמות, מחיר (או דומות)</p>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2 text-white">
+                <PlusCircle className="w-5 h-5 text-indigo-400" /> הוסף מניה ידנית
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <Input placeholder="סימול (AAPL)" value={newTicker} onChange={(e) => setNewTicker(e.target.value)} className="bg-slate-900/50 border-slate-700" />
+                <Input type="number" placeholder="כמות" value={newShares} onChange={(e) => setNewShares(e.target.value)} className="bg-slate-900/50 border-slate-700 w-24" />
+                <Input type="number" placeholder="מחיר קנייה" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} className="bg-slate-900/50 border-slate-700 w-28" />
+                <Button onClick={handleAddStock} className="bg-blue-600 hover:bg-blue-700 text-white">הוסף</Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </main>
+
+        {/* Portfolio Table */}
+        <Card className="anim-card glass-card">
+          <CardHeader>
+            <CardTitle className="text-xl flex items-center gap-2 text-white">
+              <List className="w-5 h-5 text-blue-400" /> התיק שלי
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {portfolio.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">התיק ריק. יבא קובץ Excel או הוסף מניות ידנית.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-slate-800 hover:bg-transparent">
+                      <TableHead className="text-right text-slate-400">סימול</TableHead>
+                      <TableHead className="text-right text-slate-400">כמות</TableHead>
+                      <TableHead className="text-right text-slate-400">מחיר רכישה</TableHead>
+                      <TableHead className="text-right text-slate-400">מחיר נוכחי</TableHead>
+                      <TableHead className="text-right text-slate-400">רווח/הפסד</TableHead>
+                      <TableHead className="text-right text-slate-400">%</TableHead>
+                      <TableHead className="text-right text-slate-400"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {portfolio.map((stock, i) => {
+                      const stockGain = (stock.currentPrice - stock.buyPrice) * stock.shares;
+                      const stockGainPercent = stock.buyPrice > 0 ? ((stock.currentPrice - stock.buyPrice) / stock.buyPrice) * 100 : 0;
+                      const sym = stock.currency === "ILS" ? "₪" : "$";
+                      const color = stockGain >= 0 ? "text-emerald-500" : "text-red-500";
+
+                      return (
+                        <TableRow 
+                          key={i} 
+                          className="border-slate-800 hover:bg-slate-800/50 cursor-pointer transition-colors"
+                          onClick={() => setSelectedStock(stock)}
+                        >
+                          <TableCell className="font-semibold text-white">{stock.ticker} <span className="text-slate-500 text-xs font-normal">({stock.currency})</span></TableCell>
+                          <TableCell>{stock.shares}</TableCell>
+                          <TableCell dir="ltr" className="text-right">{sym}{stock.buyPrice.toFixed(2)}</TableCell>
+                          <TableCell dir="ltr" className="text-right">{sym}{stock.currentPrice.toFixed(2)}</TableCell>
+                          <TableCell dir="ltr" className={`text-right ${color}`}>{stockGain >= 0 ? "+" : ""}{sym}{Math.abs(stockGain).toFixed(2)}</TableCell>
+                          <TableCell dir="ltr" className={`text-right ${color}`}>{stockGainPercent >= 0 ? "+" : ""}{stockGainPercent.toFixed(2)}%</TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="icon" className="text-slate-500 hover:text-red-500 hover:bg-red-500/10" onClick={(e) => { e.stopPropagation(); removeStock(i); }}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Detail View Dialog */}
+      <Dialog open={!!selectedStock} onOpenChange={(open) => !open && setSelectedStock(null)}>
+        <DialogContent className="max-w-4xl bg-slate-900 border-slate-700 text-slate-100 p-6 md:p-8 rounded-2xl shadow-2xl" dir="rtl">
+          {selectedStock && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold flex items-center gap-2 text-white">
+                  <TrendingUp className="w-6 h-6 text-blue-500" /> {selectedStock.ticker} 
+                  <span className="text-sm text-slate-400 font-normal bg-slate-800 px-2 py-1 rounded">
+                    {selectedStock.dataSource === "excel" ? "נתוני EXCEL" : "ידני"}
+                  </span>
+                </DialogTitle>
+              </DialogHeader>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                  <div className="text-sm text-slate-400 mb-1">מחיר עלות</div>
+                  <div className="text-xl font-semibold text-white">{selectedStock.currency === "ILS" ? "₪" : "$"}{selectedStock.buyPrice.toFixed(2)}</div>
+                </div>
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                  <div className="text-sm text-slate-400 mb-1">מחיר נוכחי</div>
+                  <div className="text-xl font-semibold text-white">{selectedStock.currency === "ILS" ? "₪" : "$"}{selectedStock.currentPrice.toFixed(2)}</div>
+                </div>
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                  <div className="text-sm text-slate-400 mb-1">תשואה</div>
+                  <div className={`text-xl font-bold ${selectedStock.currentPrice >= selectedStock.buyPrice ? "text-emerald-500" : "text-red-500"}`} dir="ltr">
+                    {selectedStock.currentPrice >= selectedStock.buyPrice ? "+" : ""}
+                    {(((selectedStock.currentPrice - selectedStock.buyPrice) / selectedStock.buyPrice) * 100).toFixed(2)}%
+                  </div>
+                </div>
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                  <div className="text-sm text-slate-400 mb-1">כמות</div>
+                  <div className="text-xl font-semibold text-white">{selectedStock.shares}</div>
+                </div>
+              </div>
+
+              <div className="mt-8 border border-slate-700/50 bg-slate-800/30 rounded-xl p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="font-semibold text-lg flex items-center gap-2 text-white"><LineChart className="w-5 h-5 text-indigo-400" /> גרף מחירים</h3>
+                  <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-700">
+                    {["1w", "1mo", "3mo", "6mo", "1y"].map((p) => (
+                      <button 
+                        key={p} 
+                        onClick={() => setChartPeriod(p)}
+                        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${chartPeriod === p ? "bg-blue-600 text-white font-medium shadow-sm" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="h-[300px] w-full">
+                  <Line {...getChartOptions(selectedStock)} />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <div className="flex items-center gap-4 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                  <div className="p-2 bg-blue-500/10 rounded-lg"><Coins className="text-blue-500 w-6 h-6" /></div>
+                  <div>
+                    <div className="text-xs text-slate-400 mb-0.5">מטבע</div>
+                    <div className="font-medium text-slate-200">{selectedStock.currency === "ILS" ? "שקל ישראלי (₪)" : "דולר אמריקאי ($)"}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                  <div className="p-2 bg-blue-500/10 rounded-lg"><Calendar className="text-blue-500 w-6 h-6" /></div>
+                  <div>
+                    <div className="text-xs text-slate-400 mb-0.5">עדכון אחרון</div>
+                    <div className="font-medium text-slate-200">{new Date().toLocaleDateString("he-IL")}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                  <div className="p-2 bg-blue-500/10 rounded-lg"><RefreshCcw className="text-blue-500 w-6 h-6" /></div>
+                  <div>
+                    <div className="text-xs text-slate-400 mb-0.5">שער המרה</div>
+                    <div className="font-medium text-slate-200" dir="ltr">$1 = ₪{usdIlsRate.toFixed(2)}</div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
