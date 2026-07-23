@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מעקב תיק מניות</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+
+        <!-- Portfolio View (Main) -->
+        <div id="portfolio-view">
+            <!-- Header -->
+            <header>
+                <div class="logo">
+                    <i class="fas fa-chart-line"></i>
+                    <h1>מעקב תיק מניות</h1>
+                </div>
+            </header>
+
+            <!-- Stats Grid -->
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-title">
+                        <span>שווי תיק</span>
+                        <i class="fas fa-wallet"></i>
+                    </div>
+                    <div class="card-value" id="totalValue">$0.00</div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <span>רווח/הפסד</span>
+                        <i class="fas fa-arrow-up"></i>
+                    </div>
+                    <div class="card-value" id="totalGain">$0.00</div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <span>אחוז שינוי</span>
+                        <i class="fas fa-percent"></i>
+                    </div>
+                    <div class="card-value" id="totalPercent">0.00%</div>
+                </div>
+            </div>
+
+            <!-- Main Wrapper -->
+            <div class="main-wrapper">
+
+                <!-- Import Section -->
+                <div class="section-panel">
+                    <h2><i class="fas fa-file-excel"></i> יבוא מ-Excel</h2>
+                    <div class="import-area">
+                        <div class="file-input-wrapper">
+                            <input type="file" id="excelUpload" accept=".xlsx, .xls">
+                            <span style="font-size: 0.85rem; color: #64748b;">הקובץ צריך לכלול עמודות: טיקר, כמות,
+                                מחיר</span>
+                        </div>
+                        <button class="btn-import" id="importBtn">
+                            יבא מהקובץ <i class="fas fa-file-import"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Add Stock Section -->
+                <div class="section-panel">
+                    <h2><i class="fas fa-plus-circle"></i> הוסף מניה ידנית</h2>
+                    <div class="add-stock-form">
+                        <div class="form-group">
+                            <label>סימול (Ticker)</label>
+                            <input type="text" id="ticker" placeholder="לדוגמה: AAPL">
+                        </div>
+                        <div class="form-group">
+                            <label>כמות מניות</label>
+                            <input type="number" id="shares" value="1" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>מחיר רכישה ($)</label>
+                            <input type="number" id="buyPrice" step="0.01" placeholder="0.00">
+                        </div>
+                        <button class="btn-add" id="addBtn">
+                            הוסף <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Table Section -->
+                <div class="section-panel">
+                    <h2><i class="fas fa-list"></i> התיק שלי</h2>
+                    <p style="font-size: 0.9rem; color: #64748b; margin-bottom: 1rem;">
+                        <i class="fas fa-info-circle"></i> לחץ על שורה לצפייה בניתוח מפורט
+                    </p>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>סימול</th>
+                                    <th>כמות</th>
+                                    <th>מחיר רכישה</th>
+                                    <th>מחיר נוכחי</th>
+                                    <th>רווח/הפסד</th>
+                                    <th>%</th>
+                                    <th>פעולות</th>
+                                </tr>
+                            </thead>
+                            <tbody id="portfolioBody">
+                                <!-- JS fills this -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div> <!-- End Main Wrapper -->
+        </div> <!-- End Portfolio View -->
+
+        <!-- Detail View (Hidden by default) -->
+        <div id="detail-view" style="display: none;">
+            <div id="detail-content">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+
+    </div>
+
+    <script src="api-config.js"></script>
+    <script src="stock-api.js"></script>
+    <script src="chart.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
