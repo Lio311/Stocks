@@ -482,7 +482,7 @@ export default function PortfolioTracker() {
 
       {/* Detail View Dialog */}
       <Dialog open={!!selectedStock} onOpenChange={(open) => !open && setSelectedStock(null)}>
-        <DialogContent className="max-w-4xl sm:max-w-4xl bg-background border-border text-foreground p-6 md:p-8 rounded-2xl shadow-2xl" dir="rtl">
+        <DialogContent className="max-w-4xl sm:max-w-4xl bg-background border-border text-foreground p-6 md:p-8 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
           {selectedStock && (
             <>
               <DialogHeader>
